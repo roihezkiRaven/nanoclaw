@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "personal-assistant",
+  "version": "0.1.0",
+  "description": "Single-owner personal assistant policy for NanoClaw.",
+  "extensions": {
+    "ai.nanoco.nanoclaw": {
+      "agentName": "Personal Assistant"
+    }
+  }
+}
