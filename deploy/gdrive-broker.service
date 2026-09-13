@@ -1,0 +1,12 @@
+[Unit]
+Description=NanoClaw Google Drive broker
+After=network.target
+
+[Service]
+WorkingDirectory=/home/assistant/nanoclaw
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/gdrive_broker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
