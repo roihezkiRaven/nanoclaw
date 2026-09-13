@@ -14,8 +14,9 @@ bash nanoclaw.sh
 ```
 
 In the installer select the local `personal-assistant` template, Codex as the
-provider, and your local timezone. Complete Codex's ChatGPT device login in
-your browser. Do not paste subscription credentials into files or chat.
+provider, and UTC as the group timezone so the nightly memory task fires at
+02:00 UTC. Complete Codex's ChatGPT device login in your browser. Do not paste
+subscription credentials into files or chat.
 
 After setup, run the shipped `/add-slack` and `/add-telegram` skills from the
 host coding session. Use Slack Socket Mode and pair only your Telegram DM. Seed
