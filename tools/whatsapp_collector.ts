@@ -25,7 +25,7 @@ const MAX_SEEN = 5_000;
 const logger = pino({ level: 'silent' });
 
 type AllowedGroup = { jid: string; label: string };
-type Config = { allowedGroups: AllowedGroup[] };
+type Config = { allowedGroups: AllowedGroup[]; archiveParentId: string };
 type ArchiveRecord = {
   collectedAt: string;
   groupJid: string;
@@ -45,6 +45,8 @@ function loadConfig(): Config {
   let raw: unknown;
   try { raw = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch { fail('missing or invalid config'); }
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as Config).allowedGroups)) fail('allowedGroups is required');
+  const archiveParentId = (raw as Config).archiveParentId;
+  if (typeof archiveParentId !== 'string' || !/^[A-Za-z0-9_-]{10,100}$/.test(archiveParentId)) fail('archiveParentId is required');
   const allowedGroups = (raw as Config).allowedGroups;
   if (!allowedGroups.length || allowedGroups.length > 100) fail('allowedGroups must contain 1–100 groups');
   const seen = new Set<string>();
@@ -54,7 +56,7 @@ function loadConfig(): Config {
     if (seen.has(group.jid)) fail('duplicate group JID');
     seen.add(group.jid);
   }
-  return { allowedGroups };
+  return { allowedGroups, archiveParentId };
 }
 
 function loadSeen(): Set<string> {
@@ -83,7 +85,7 @@ function textFrom(message: proto.IMessage | null | undefined): string | null {
   return null;
 }
 
-function archive(records: ArchiveRecord[]): Promise<void> {
+function archive(records: ArchiveRecord[], parentId: string): Promise<void> {
   if (!records.length) return Promise.resolve();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(STATE_DIR, `batch-${stamp}.jsonl`);
@@ -91,7 +93,7 @@ function archive(records: ArchiveRecord[]): Promise<void> {
   fs.writeFileSync(file, records.map((record) => JSON.stringify(record)).join('\n') + '\n', { mode: 0o600 });
   return new Promise((resolve, reject) => {
     const child = spawn(`${ROOT}/.venv-gdrive/bin/python`, [
-      `${ROOT}/tools/gdrive_assistant.py`, 'writer', 'write', '--name', `whatsapp-raw-${stamp}.jsonl`, '--text-file', file,
+      `${ROOT}/tools/gdrive_assistant.py`, 'writer', 'write', '--name', `whatsapp-raw-${stamp}.jsonl`, '--text-file', file, '--parent-id', parentId,
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let error = '';
     child.stderr.on('data', (chunk) => { error += String(chunk); });
@@ -125,7 +127,7 @@ async function collect(): Promise<void> {
     if (flushing || !pending.length) return;
     flushing = true;
     const batch = pending.splice(0);
-    try { await archive(batch); } catch (error) {
+    try { await archive(batch, config.archiveParentId); } catch (error) {
       pending.unshift(...batch);
       console.error(`whatsapp-collector: archive failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally { flushing = false; }
