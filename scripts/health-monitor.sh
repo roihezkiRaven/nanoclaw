@@ -16,7 +16,9 @@ issues=()
 systemctl is-active --quiet docker || issues+=(docker)
 systemctl --user is-active --quiet nanoclaw-v2-fc17183a.service || issues+=(nanoclaw)
 systemctl --user is-active --quiet gdrive-broker.service || issues+=(gdrive-broker)
-systemctl --user is-active --quiet whatsapp-collector.service || issues+=(whatsapp-collector)
+if ! systemctl --user is-active --quiet whatsapp-collector.service || ! find "$root/store/whatsapp-collector/heartbeat" -mmin -3 -print -quit 2>/dev/null | grep -q .; then
+  issues+=(whatsapp-collector)
+fi
 curl --noproxy '*' --connect-timeout 3 --max-time 5 -fsS -o /dev/null \
   -X POST http://172.17.0.1:8765/ -H 'content-type: application/json' \
   --data '{"action":"calendar","limit":1}' || issues+=(gdrive-api)

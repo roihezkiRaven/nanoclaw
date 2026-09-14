@@ -22,6 +22,7 @@ const AUTH_DIR = path.join(ROOT, 'store', 'whatsapp-collector-auth');
 const STATE_DIR = path.join(ROOT, 'store', 'whatsapp-collector');
 const SEEN_FILE = path.join(STATE_DIR, 'seen.json');
 const PENDING_DIR = path.join(STATE_DIR, 'pending');
+const HEARTBEAT_FILE = path.join(STATE_DIR, 'heartbeat');
 const MAX_TEXT_BYTES = 8_000;
 const MAX_SEEN = 5_000;
 const MAX_BATCH_RECORDS = 50;
@@ -70,6 +71,10 @@ function atomicWrite(file: string, contents: string): void {
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(temporary, contents, { mode: 0o600 });
   fs.renameSync(temporary, file);
+}
+
+function heartbeat(): void {
+  atomicWrite(HEARTBEAT_FILE, `${new Date().toISOString()}\n`);
 }
 
 function loadSeen(): Set<string> {
@@ -214,6 +219,7 @@ async function collect(): Promise<void> {
     }
   });
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (connection === 'open') heartbeat();
     if (connection === 'close') {
       const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) fail('logged out; relink required');
@@ -222,6 +228,7 @@ async function collect(): Promise<void> {
     }
   });
   void flush();
+  setInterval(heartbeat, 30_000).unref();
   setInterval(() => void flush(), UPLOAD_INTERVAL_MS).unref();
   process.on('SIGTERM', () => { void flush().finally(() => process.exit(0)); });
 }
