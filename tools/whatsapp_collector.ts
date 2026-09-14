@@ -122,6 +122,7 @@ async function collect(): Promise<void> {
   const groups = new Map(config.allowedGroups.map((group) => [group.jid, group]));
   const seen = loadSeen();
   const pending: ArchiveRecord[] = [];
+  const startedAt = Math.floor(Date.now() / 1000);
   let flushing = false;
   const flush = async () => {
     if (flushing || !pending.length) return;
@@ -145,10 +146,12 @@ async function collect(): Promise<void> {
       const jid = item.key.remoteJid;
       const id = item.key.id;
       if (!jid || !id || item.key.fromMe || !groups.has(jid) || seen.has(id)) continue;
+      const messageTimestamp = Number(item.messageTimestamp ?? 0);
+      if (!Number.isFinite(messageTimestamp) || messageTimestamp < startedAt) continue;
       const text = textFrom(item.message);
       if (!text || Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) continue;
       seen.add(id);
-      pending.push({ collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(Number(item.messageTimestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text });
+      pending.push({ collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(messageTimestamp * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text });
     }
     saveSeen(seen);
     void flush();
