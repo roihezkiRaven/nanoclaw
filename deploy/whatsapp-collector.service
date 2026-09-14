@@ -4,7 +4,6 @@ After=network-online.target gdrive-broker.service
 
 [Service]
 Type=simple
-User=assistant
 WorkingDirectory=/home/assistant/nanoclaw
 ExecStart=/home/assistant/nanoclaw/node_modules/.bin/tsx /home/assistant/nanoclaw/tools/whatsapp_collector.ts collect
 Restart=always
