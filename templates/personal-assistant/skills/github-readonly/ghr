@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+set -eu
+
+readonly_error() {
+  echo "Only read-only GitHub inspection commands are allowed." >&2
+  exit 2
+}
+
+case "${1:-}" in
+  issue) case "${2:-}" in list|view) ;; *) readonly_error ;; esac ;;
+  pr) case "${2:-}" in status|list|view|checks) ;; *) readonly_error ;; esac ;;
+  repo) case "${2:-}" in view|list) ;; *) readonly_error ;; esac ;;
+  api) for arg in "$@"; do case "$arg" in -X|--method|--raw-field|--field|--input) readonly_error ;; esac; done ;;
+  *) readonly_error ;;
+esac
+
+export GH_TOKEN=ghp_onecli_proxy_replaces_this
+export GIT_SSL_CAINFO=/tmp/onecli-combined-ca.pem
+export GIT_TERMINAL_PROMPT=0
+exec gh "$@"
