@@ -143,6 +143,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--name")
     parser.add_argument("--text")
+    parser.add_argument("--text-file")
     parser.add_argument("--start")
     parser.add_argument("--end")
     args = parser.parse_args()
@@ -161,9 +162,13 @@ def main() -> None:
             parser.error("calendar events requires calendar mode")
         calendar_events(args.start, args.end, args.limit)
     else:
-        if args.mode != "writer" or not args.name or args.text is None:
+        if args.mode != "writer" or not args.name or (args.text is None and not args.text_file):
             parser.error("writer write requires --name and --text")
-        write(args.name, args.text)
+        if args.text_file:
+            text = Path(args.text_file).read_text(encoding="utf-8")
+        else:
+            text = args.text
+        write(args.name, text)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ groups/*
 *.keys.json
 .env
 .env*
+config/
 
 # Temp files
 .tmp-*

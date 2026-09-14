@@ -1,0 +1,18 @@
+[Unit]
+Description=Allow-listed WhatsApp archive collector
+After=network-online.target gdrive-broker.service
+
+[Service]
+Type=simple
+User=assistant
+WorkingDirectory=/home/assistant/nanoclaw
+ExecStart=/home/assistant/nanoclaw/node_modules/.bin/tsx /home/assistant/nanoclaw/tools/whatsapp_collector.ts collect
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/assistant/nanoclaw/store /home/assistant/nanoclaw/config
+
+[Install]
+WantedBy=default.target
