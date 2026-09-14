@@ -76,6 +76,19 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 raise ValueError("unsupported MIME type: " + meta["mimeType"])
             return {"ok": True, "name": meta["name"], "text": data[:MAX_BYTES].decode("utf-8", "replace")}
+        if action == "list":
+            folder_id = str(body.get("folder_id", "")).strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{10,100}", folder_id):
+                raise ValueError("folder_id is invalid")
+            files = drive.service("reader", False).files().list(
+                q=f"trashed = false and '{folder_id}' in parents",
+                pageSize=min(max(int(body.get("limit", 50)), 1), 50),
+                orderBy="folder,name",
+                fields="files(id,name,mimeType,modifiedTime,webViewLink,size)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute().get("files", [])
+            return {"ok": True, "files": files}
         if action == "write":
             name = str(body.get("name", ""))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
@@ -126,7 +139,7 @@ class Handler(BaseHTTPRequestHandler):
             events.sort(key=lambda event: event.get("start", {}).get("dateTime") or event.get("start", {}).get("date", ""))
             events = events[:limit]
             return {"ok": True, "events": events}
-        raise ValueError("action must be search, read, write, mkdir, or calendar")
+        raise ValueError("action must be search, list, read, write, mkdir, or calendar")
 
     def reply(self, status, payload):
         data = json.dumps(payload).encode()

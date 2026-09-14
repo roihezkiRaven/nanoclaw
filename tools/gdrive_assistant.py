@@ -79,6 +79,21 @@ def search(query: str, limit: int) -> None:
     print(json.dumps(result.get("files", []), indent=2))
 
 
+def list_folder(folder_id: str, limit: int) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,100}", folder_id):
+        raise RuntimeError("folder_id is invalid")
+    drive = service("reader", authorize=False)
+    result = drive.files().list(
+        q=f"trashed = false and '{folder_id}' in parents",
+        pageSize=limit,
+        orderBy="folder,name",
+        fields="files(id,name,mimeType,modifiedTime,webViewLink,size)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
+    print(json.dumps(result.get("files", []), indent=2))
+
+
 def read(file_id: str) -> None:
     drive = service("reader", authorize=False)
     meta = drive.files().get(fileId=file_id, fields="name,mimeType").execute()
@@ -166,7 +181,7 @@ def calendar_events(start: str | None, end: str | None, limit: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("reader", "writer", "calendar"))
-    parser.add_argument("action", choices=("auth", "search", "read", "write", "mkdir", "events"))
+    parser.add_argument("action", choices=("auth", "search", "list", "read", "write", "mkdir", "events"))
     parser.add_argument("--query")
     parser.add_argument("--file-id")
     parser.add_argument("--limit", type=int, default=10)
@@ -187,6 +202,10 @@ def main() -> None:
         if args.mode != "reader" or not args.file_id:
             parser.error("reader read requires --file-id")
         read(args.file_id)
+    elif args.action == "list":
+        if args.mode != "reader" or not args.file_id:
+            parser.error("reader list requires --file-id")
+        list_folder(args.file_id, min(max(args.limit, 1), 50))
     elif args.action == "events":
         if args.mode != "calendar":
             parser.error("calendar events requires calendar mode")
