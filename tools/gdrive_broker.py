@@ -15,6 +15,24 @@ import gdrive_assistant as drive
 MAX_BYTES = 1_000_000
 
 
+def writer_parent(api, requested_parent):
+    root = drive.env_value("GOOGLE_WRITER_FOLDER_ID")
+    if not root:
+        raise ValueError("writer folder is not configured")
+    current = str(requested_parent or root)
+    for _ in range(10):
+        if current == root:
+            return current
+        meta = api.files().get(fileId=current, fields="mimeType,parents", supportsAllDrives=True).execute()
+        if meta.get("mimeType") != "application/vnd.google-apps.folder":
+            raise ValueError("parent_id must be a folder inside the writer folder")
+        parents = meta.get("parents") or []
+        if len(parents) != 1:
+            break
+        current = parents[0]
+    raise ValueError("parent_id is outside the writer folder")
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
@@ -62,17 +80,28 @@ class Handler(BaseHTTPRequestHandler):
             name = str(body.get("name", ""))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
                 raise ValueError("name must be a simple filename")
-            folder_id = drive.env_value("GOOGLE_WRITER_FOLDER_ID")
-            if not folder_id:
-                raise ValueError("writer folder is not configured")
+            api = drive.service("writer", False)
+            folder_id = writer_parent(api, body.get("parent_id"))
             media = MediaIoBaseUpload(io.BytesIO(str(body.get("text", "")).encode()), mimetype="text/plain", resumable=False)
-            file = drive.service("writer", False).files().create(
+            file = api.files().create(
                 body={"name": name, "parents": [folder_id], "mimeType": "text/plain"},
                 media_body=media,
                 fields="id,name,webViewLink",
                 supportsAllDrives=True,
             ).execute()
             return {"ok": True, "file": file}
+        if action == "mkdir":
+            name = str(body.get("name", ""))
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
+                raise ValueError("name must be a simple folder name")
+            api = drive.service("writer", False)
+            folder_id = writer_parent(api, body.get("parent_id"))
+            folder = api.files().create(
+                body={"name": name, "parents": [folder_id], "mimeType": "application/vnd.google-apps.folder"},
+                fields="id,name,webViewLink",
+                supportsAllDrives=True,
+            ).execute()
+            return {"ok": True, "folder": folder}
         if action == "calendar":
             now = datetime.now(timezone.utc)
             time_min = str(body.get("start") or now.isoformat().replace("+00:00", "Z"))
@@ -97,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
             events.sort(key=lambda event: event.get("start", {}).get("dateTime") or event.get("start", {}).get("date", ""))
             events = events[:limit]
             return {"ok": True, "events": events}
-        raise ValueError("action must be search, read, write, or calendar")
+        raise ValueError("action must be search, read, write, mkdir, or calendar")
 
     def reply(self, status, payload):
         data = json.dumps(payload).encode()

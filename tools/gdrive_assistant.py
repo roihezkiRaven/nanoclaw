@@ -94,18 +94,47 @@ def read(file_id: str) -> None:
     sys.stdout.buffer.write(data[:1_000_000])
 
 
-def write(name: str, text: str) -> None:
+def writer_parent(api, requested_parent: str | None) -> str:
+    root = env_value("GOOGLE_WRITER_FOLDER_ID")
+    if not root:
+        raise RuntimeError("GOOGLE_WRITER_FOLDER_ID is not configured")
+    current = requested_parent or root
+    for _ in range(10):
+        if current == root:
+            return current
+        meta = api.files().get(fileId=current, fields="mimeType,parents", supportsAllDrives=True).execute()
+        if meta.get("mimeType") != "application/vnd.google-apps.folder":
+            raise RuntimeError("parent must be a folder inside the writer folder")
+        parents = meta.get("parents") or []
+        if len(parents) != 1:
+            break
+        current = parents[0]
+    raise RuntimeError("parent is outside the writer folder")
+
+
+def write(name: str, text: str, parent_id: str | None) -> None:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
         raise RuntimeError("name must be a simple filename")
-    folder_id = env_value("GOOGLE_WRITER_FOLDER_ID")
-    if not folder_id:
-        raise RuntimeError("GOOGLE_WRITER_FOLDER_ID is not configured")
     drive = service("writer", authorize=False)
+    folder_id = writer_parent(drive, parent_id)
     media = MediaIoBaseUpload(io.BytesIO(text.encode()), mimetype="text/plain", resumable=False)
     created = drive.files().create(
         body={"name": name, "parents": [folder_id], "mimeType": "text/plain"},
         media_body=media,
         fields="id,name,webViewLink",
+    ).execute()
+    print(json.dumps(created))
+
+
+def mkdir(name: str, parent_id: str | None) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
+        raise RuntimeError("name must be a simple folder name")
+    drive = service("writer", authorize=False)
+    folder_id = writer_parent(drive, parent_id)
+    created = drive.files().create(
+        body={"name": name, "parents": [folder_id], "mimeType": "application/vnd.google-apps.folder"},
+        fields="id,name,webViewLink",
+        supportsAllDrives=True,
     ).execute()
     print(json.dumps(created))
 
@@ -137,7 +166,7 @@ def calendar_events(start: str | None, end: str | None, limit: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("reader", "writer", "calendar"))
-    parser.add_argument("action", choices=("auth", "search", "read", "write", "events"))
+    parser.add_argument("action", choices=("auth", "search", "read", "write", "mkdir", "events"))
     parser.add_argument("--query")
     parser.add_argument("--file-id")
     parser.add_argument("--limit", type=int, default=10)
@@ -146,6 +175,7 @@ def main() -> None:
     parser.add_argument("--text-file")
     parser.add_argument("--start")
     parser.add_argument("--end")
+    parser.add_argument("--parent-id")
     args = parser.parse_args()
     if args.action == "auth":
         auth(args.mode)
@@ -161,6 +191,10 @@ def main() -> None:
         if args.mode != "calendar":
             parser.error("calendar events requires calendar mode")
         calendar_events(args.start, args.end, args.limit)
+    elif args.action == "mkdir":
+        if args.mode != "writer" or not args.name:
+            parser.error("writer mkdir requires --name")
+        mkdir(args.name, args.parent_id)
     else:
         if args.mode != "writer" or not args.name or (args.text is None and not args.text_file):
             parser.error("writer write requires --name and --text")
@@ -168,7 +202,7 @@ def main() -> None:
             text = Path(args.text_file).read_text(encoding="utf-8")
         else:
             text = args.text
-        write(args.name, text)
+        write(args.name, text, args.parent_id)
 
 
 if __name__ == "__main__":
