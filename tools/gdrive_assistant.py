@@ -114,16 +114,24 @@ def calendar_events(start: str | None, end: str | None, limit: int) -> None:
     now = datetime.now(timezone.utc)
     time_min = start or now.isoformat().replace("+00:00", "Z")
     time_max = end or (now + timedelta(days=7)).isoformat().replace("+00:00", "Z")
-    result = service("calendar", authorize=False).events().list(
-        calendarId="primary",
-        timeMin=time_min,
-        timeMax=time_max,
-        maxResults=min(max(limit, 1), 50),
-        singleEvents=True,
-        orderBy="startTime",
-        fields="items(id,summary,start,end,location,htmlLink,status)",
-    ).execute()
-    print(json.dumps(result.get("items", []), indent=2))
+    api = service("calendar", authorize=False)
+    calendars = api.calendarList().list(fields="items(id,summary,primary)").execute().get("items", [])
+    events = []
+    for calendar in calendars:
+        result = api.events().list(
+            calendarId=calendar["id"],
+            timeMin=time_min,
+            timeMax=time_max,
+            maxResults=min(max(limit, 1), 50),
+            singleEvents=True,
+            orderBy="startTime",
+            fields="items(id,summary,start,end,location,htmlLink,status)",
+        ).execute()
+        for event in result.get("items", []):
+            event["calendar"] = {"id": calendar["id"], "summary": calendar.get("summary"), "primary": calendar.get("primary", False)}
+            events.append(event)
+    events.sort(key=lambda event: event.get("start", {}).get("dateTime") or event.get("start", {}).get("date", ""))
+    print(json.dumps(events[: min(max(limit, 1), 50)], indent=2))
 
 
 def main() -> None:

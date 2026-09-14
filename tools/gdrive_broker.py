@@ -77,15 +77,25 @@ class Handler(BaseHTTPRequestHandler):
             now = datetime.now(timezone.utc)
             time_min = str(body.get("start") or now.isoformat().replace("+00:00", "Z"))
             time_max = str(body.get("end") or (now + timedelta(days=7)).isoformat().replace("+00:00", "Z"))
-            events = drive.service("calendar", False).events().list(
-                calendarId="primary",
-                timeMin=time_min,
-                timeMax=time_max,
-                maxResults=min(max(int(body.get("limit", 20)), 1), 50),
-                singleEvents=True,
-                orderBy="startTime",
-                fields="items(id,summary,start,end,location,htmlLink,status)",
-            ).execute().get("items", [])
+            limit = min(max(int(body.get("limit", 20)), 1), 50)
+            api = drive.service("calendar", False)
+            calendars = api.calendarList().list(fields="items(id,summary,primary)").execute().get("items", [])
+            events = []
+            for calendar in calendars:
+                result = api.events().list(
+                    calendarId=calendar["id"],
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    maxResults=limit,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    fields="items(id,summary,start,end,location,htmlLink,status)",
+                ).execute()
+                for event in result.get("items", []):
+                    event["calendar"] = {"id": calendar["id"], "summary": calendar.get("summary"), "primary": calendar.get("primary", False)}
+                    events.append(event)
+            events.sort(key=lambda event: event.get("start", {}).get("dateTime") or event.get("start", {}).get("date", ""))
+            events = events[:limit]
             return {"ok": True, "events": events}
         raise ValueError("action must be search, read, write, or calendar")
 
