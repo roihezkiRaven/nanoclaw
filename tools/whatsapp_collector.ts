@@ -100,7 +100,7 @@ function enqueue(record: ArchiveRecord): boolean {
 
 type PendingRecord = { file: string; record: ArchiveRecord };
 
-function pendingRecords(): PendingRecord[] {
+function pendingRecords(seen: Set<string>): PendingRecord[] {
   fs.mkdirSync(PENDING_DIR, { recursive: true, mode: 0o700 });
   const records: PendingRecord[] = [];
   for (const name of fs.readdirSync(PENDING_DIR).filter((entry) => entry.endsWith('.json')).sort()) {
@@ -108,6 +108,10 @@ function pendingRecords(): PendingRecord[] {
     try {
       const record = JSON.parse(fs.readFileSync(file, 'utf8')) as ArchiveRecord;
       if (!record || typeof record.messageId !== 'string' || typeof record.groupJid !== 'string' || typeof record.text !== 'string') throw new Error('invalid queued record');
+      if (seen.has(recordKey(record))) {
+        fs.rmSync(file, { force: true });
+        continue;
+      }
       records.push({ file, record });
     } catch (error) {
       console.error(`whatsapp-collector: retaining unreadable pending file ${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -175,16 +179,16 @@ async function collect(): Promise<void> {
   let flushing = false;
   const flush = async () => {
     if (flushing) return;
-    const batch = pendingRecords();
+    const batch = pendingRecords(seen);
     if (!batch.length) return;
     flushing = true;
     try {
       await archive(batch.map(({ record }) => record), config.archiveParentId);
-      for (const { file, record } of batch) {
-        seen.add(recordKey(record));
+      for (const { record } of batch) seen.add(recordKey(record));
+      saveSeen(seen);
+      for (const { file } of batch) {
         fs.rmSync(file, { force: true });
       }
-      saveSeen(seen);
     } catch (error) {
       console.error(`whatsapp-collector: archive failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally { flushing = false; }
