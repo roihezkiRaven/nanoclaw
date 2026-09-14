@@ -43,7 +43,11 @@ import {
 } from '@whiskeysockets/baileys';
 import { emitStatus } from './status.js';
 
-const AUTH_DIR = path.join(process.cwd(), 'store', 'auth');
+const authDirectory = process.env.WHATSAPP_AUTH_DIR;
+if (authDirectory && !/^store\/[A-Za-z0-9._-]+$/.test(authDirectory)) {
+  throw new Error('WHATSAPP_AUTH_DIR must be a direct directory under store/');
+}
+const AUTH_DIR = path.join(process.cwd(), authDirectory ?? 'store/auth');
 const PAIRING_CODE_FILE = path.join(process.cwd(), 'store', 'pairing-code.txt');
 const baileysLogger = pino({ level: 'silent' });
 
