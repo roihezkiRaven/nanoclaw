@@ -1,5 +1,6 @@
 /** Deterministic, allow-listed WhatsApp group archive collector. */
 import { spawn } from 'child_process';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,12 +21,15 @@ const CONFIG = path.join(ROOT, 'config', 'whatsapp-collector.json');
 const AUTH_DIR = path.join(ROOT, 'store', 'whatsapp-collector-auth');
 const STATE_DIR = path.join(ROOT, 'store', 'whatsapp-collector');
 const SEEN_FILE = path.join(STATE_DIR, 'seen.json');
+const PENDING_DIR = path.join(STATE_DIR, 'pending');
 const MAX_TEXT_BYTES = 8_000;
 const MAX_SEEN = 5_000;
+const MAX_BATCH_RECORDS = 50;
+const UPLOAD_INTERVAL_MS = 30_000;
 const logger = pino({ level: 'silent' });
 
 type AllowedGroup = { jid: string; label: string };
-type Config = { allowedGroups: AllowedGroup[]; archiveParentId: string };
+type Config = { allowedGroups: AllowedGroup[]; archiveParentId: string; activationAfter: number };
 type ArchiveRecord = {
   collectedAt: string;
   groupJid: string;
@@ -47,6 +51,8 @@ function loadConfig(): Config {
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as Config).allowedGroups)) fail('allowedGroups is required');
   const archiveParentId = (raw as Config).archiveParentId;
   if (typeof archiveParentId !== 'string' || !/^[A-Za-z0-9_-]{10,100}$/.test(archiveParentId)) fail('archiveParentId is required');
+  const activationAfter = (raw as Config).activationAfter;
+  if (!Number.isInteger(activationAfter) || activationAfter < 1_577_836_800 || activationAfter > Math.floor(Date.now() / 1000) + 60) fail('activationAfter is required');
   const allowedGroups = (raw as Config).allowedGroups;
   if (!allowedGroups.length || allowedGroups.length > 100) fail('allowedGroups must contain 1–100 groups');
   const seen = new Set<string>();
@@ -56,7 +62,14 @@ function loadConfig(): Config {
     if (seen.has(group.jid)) fail('duplicate group JID');
     seen.add(group.jid);
   }
-  return { allowedGroups, archiveParentId };
+  return { allowedGroups, archiveParentId, activationAfter };
+}
+
+function atomicWrite(file: string, contents: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temporary, contents, { mode: 0o600 });
+  fs.renameSync(temporary, file);
 }
 
 function loadSeen(): Set<string> {
@@ -67,8 +80,41 @@ function loadSeen(): Set<string> {
 }
 
 function saveSeen(seen: Set<string>): void {
-  fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(SEEN_FILE, JSON.stringify([...seen].slice(-MAX_SEEN)), { mode: 0o600 });
+  atomicWrite(SEEN_FILE, JSON.stringify([...seen].slice(-MAX_SEEN)));
+}
+
+function recordKey(record: ArchiveRecord): string {
+  return `${record.groupJid}:${record.messageId}`;
+}
+
+function pendingFile(record: ArchiveRecord): string {
+  return path.join(PENDING_DIR, `${createHash('sha256').update(recordKey(record)).digest('hex')}.json`);
+}
+
+function enqueue(record: ArchiveRecord): boolean {
+  const file = pendingFile(record);
+  if (fs.existsSync(file)) return false;
+  atomicWrite(file, JSON.stringify(record));
+  return true;
+}
+
+type PendingRecord = { file: string; record: ArchiveRecord };
+
+function pendingRecords(): PendingRecord[] {
+  fs.mkdirSync(PENDING_DIR, { recursive: true, mode: 0o700 });
+  const records: PendingRecord[] = [];
+  for (const name of fs.readdirSync(PENDING_DIR).filter((entry) => entry.endsWith('.json')).sort()) {
+    const file = path.join(PENDING_DIR, name);
+    try {
+      const record = JSON.parse(fs.readFileSync(file, 'utf8')) as ArchiveRecord;
+      if (!record || typeof record.messageId !== 'string' || typeof record.groupJid !== 'string' || typeof record.text !== 'string') throw new Error('invalid queued record');
+      records.push({ file, record });
+    } catch (error) {
+      console.error(`whatsapp-collector: retaining unreadable pending file ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (records.length === MAX_BATCH_RECORDS) break;
+  }
+  return records;
 }
 
 async function version(): Promise<[number, number, number]> {
@@ -89,16 +135,21 @@ function archive(records: ArchiveRecord[], parentId: string): Promise<void> {
   if (!records.length) return Promise.resolve();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(STATE_DIR, `batch-${stamp}.jsonl`);
-  fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(file, records.map((record) => JSON.stringify(record)).join('\n') + '\n', { mode: 0o600 });
+  atomicWrite(file, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
   return new Promise((resolve, reject) => {
     const child = spawn(`${ROOT}/.venv-gdrive/bin/python`, [
       `${ROOT}/tools/gdrive_assistant.py`, 'writer', 'write', '--name', `whatsapp-raw-${stamp}.jsonl`, '--text-file', file, '--parent-id', parentId,
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let error = '';
     child.stderr.on('data', (chunk) => { error += String(chunk); });
-    child.on('error', reject);
-    child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(error || `Drive archive exit ${code}`)));
+    child.on('error', (error) => {
+      fs.rmSync(file, { force: true });
+      reject(error);
+    });
+    child.on('exit', (code) => {
+      fs.rmSync(file, { force: true });
+      code === 0 ? resolve() : reject(new Error(error || `Drive archive exit ${code}`));
+    });
   });
 }
 
@@ -121,15 +172,20 @@ async function collect(): Promise<void> {
   const config = loadConfig();
   const groups = new Map(config.allowedGroups.map((group) => [group.jid, group]));
   const seen = loadSeen();
-  const pending: ArchiveRecord[] = [];
-  const startedAt = Math.floor(Date.now() / 1000);
   let flushing = false;
   const flush = async () => {
-    if (flushing || !pending.length) return;
+    if (flushing) return;
+    const batch = pendingRecords();
+    if (!batch.length) return;
     flushing = true;
-    const batch = pending.splice(0);
-    try { await archive(batch, config.archiveParentId); } catch (error) {
-      pending.unshift(...batch);
+    try {
+      await archive(batch.map(({ record }) => record), config.archiveParentId);
+      for (const { file, record } of batch) {
+        seen.add(recordKey(record));
+        fs.rmSync(file, { force: true });
+      }
+      saveSeen(seen);
+    } catch (error) {
       console.error(`whatsapp-collector: archive failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally { flushing = false; }
   };
@@ -145,16 +201,13 @@ async function collect(): Promise<void> {
     for (const item of messages) {
       const jid = item.key.remoteJid;
       const id = item.key.id;
-      if (!jid || !id || item.key.fromMe || !groups.has(jid) || seen.has(id)) continue;
+      if (!jid || !id || item.key.fromMe || !groups.has(jid) || seen.has(`${jid}:${id}`)) continue;
       const messageTimestamp = Number(item.messageTimestamp ?? 0);
-      if (!Number.isFinite(messageTimestamp) || messageTimestamp < startedAt) continue;
+      if (!Number.isFinite(messageTimestamp) || messageTimestamp < config.activationAfter) continue;
       const text = textFrom(item.message);
       if (!text || Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) continue;
-      seen.add(id);
-      pending.push({ collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(messageTimestamp * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text });
+      enqueue({ collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(messageTimestamp * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text });
     }
-    saveSeen(seen);
-    void flush();
   });
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection === 'close') {
@@ -164,7 +217,8 @@ async function collect(): Promise<void> {
       process.exit(1);
     }
   });
-  setInterval(() => void flush(), 60_000).unref();
+  void flush();
+  setInterval(() => void flush(), UPLOAD_INTERVAL_MS).unref();
   process.on('SIGTERM', () => { void flush().finally(() => process.exit(0)); });
 }
 
