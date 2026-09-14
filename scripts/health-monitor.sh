@@ -16,6 +16,7 @@ issues=()
 systemctl is-active --quiet docker || issues+=(docker)
 systemctl --user is-active --quiet nanoclaw-v2-fc17183a.service || issues+=(nanoclaw)
 systemctl --user is-active --quiet gdrive-broker.service || issues+=(gdrive-broker)
+systemctl --user is-active --quiet whatsapp-collector.service || issues+=(whatsapp-collector)
 curl --noproxy '*' --connect-timeout 3 --max-time 5 -fsS -o /dev/null \
   -X POST http://172.17.0.1:8765/ -H 'content-type: application/json' \
   --data '{"action":"calendar","limit":1}' || issues+=(gdrive-api)
@@ -40,6 +41,9 @@ if [[ ",$summary," == *,nanoclaw,* ]]; then
 fi
 if [[ ",$summary," == *,gdrive-broker,* || ",$summary," == *,gdrive-api,* ]]; then
   systemctl --user restart gdrive-broker.service || true
+fi
+if [[ ",$summary," == *,whatsapp-collector,* ]]; then
+  systemctl --user restart whatsapp-collector.service || true
 fi
 
 if "$root/node_modules/.bin/tsx" "$root/src/cli/client.ts" tasks create \
