@@ -13,6 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import gdrive_assistant as drive
 
 MAX_BYTES = 1_000_000
+MAX_TREE_ITEMS = 200
 
 
 def writer_parent(api, requested_parent):
@@ -31,6 +32,37 @@ def writer_parent(api, requested_parent):
             break
         current = parents[0]
     raise ValueError("parent_id is outside the writer folder")
+
+
+def folder_tree(api, root_id, max_depth, max_items):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,100}", root_id):
+        raise ValueError("folder_id is invalid")
+    max_depth = min(max(int(max_depth), 0), 4)
+    max_items = min(max(int(max_items), 1), MAX_TREE_ITEMS)
+    queue = [(root_id, "", 0)]
+    files = []
+    while queue and len(files) < max_items:
+        parent_id, prefix, depth = queue.pop(0)
+        page_token = None
+        while len(files) < max_items:
+            result = api.files().list(
+                q=f"trashed = false and '{parent_id}' in parents",
+                pageSize=min(50, max_items - len(files)),
+                pageToken=page_token,
+                orderBy="folder,name",
+                fields="nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,size)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+            for item in result.get("files", []):
+                item["path"] = f"{prefix}/{item['name']}" if prefix else item["name"]
+                files.append(item)
+                if item.get("mimeType") == "application/vnd.google-apps.folder" and depth < max_depth:
+                    queue.append((item["id"], item["path"], depth + 1))
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+    return {"ok": True, "files": files, "truncated": bool(queue) or len(files) == max_items}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -89,6 +121,13 @@ class Handler(BaseHTTPRequestHandler):
                 includeItemsFromAllDrives=True,
             ).execute().get("files", [])
             return {"ok": True, "files": files}
+        if action == "tree":
+            return folder_tree(
+                drive.service("reader", False),
+                str(body.get("folder_id", "")).strip(),
+                body.get("max_depth", 2),
+                body.get("limit", 100),
+            )
         if action == "write":
             name = str(body.get("name", ""))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
@@ -139,7 +178,7 @@ class Handler(BaseHTTPRequestHandler):
             events.sort(key=lambda event: event.get("start", {}).get("dateTime") or event.get("start", {}).get("date", ""))
             events = events[:limit]
             return {"ok": True, "events": events}
-        raise ValueError("action must be search, list, read, write, mkdir, or calendar")
+        raise ValueError("action must be search, list, tree, read, write, mkdir, or calendar")
 
     def reply(self, status, payload):
         data = json.dumps(payload).encode()
