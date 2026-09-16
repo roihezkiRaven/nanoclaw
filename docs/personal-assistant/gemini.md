@@ -10,12 +10,22 @@ harvest or piggyback on Gemini CLI OAuth authentication. Therefore NanoClaw does
 not store, mount, refresh, proxy, or invoke the subscription OAuth session from
 agent turns, cron jobs, ADK workers, or wrappers.
 
+## What the subscription provides
+
+The published Gemini CLI limits currently list 1,500 requests/day for Google AI
+Pro and 2,000 requests/day for Google AI Ultra. Agent mode and Gemini CLI usage
+share the same per-user quota, so adding NanoClaw as another OAuth client would
+not create extra quota and would make usage accounting less predictable.
+
 ## Supported use
 
 Use Gemini CLI interactively on a trusted workstation, authenticate with the
-subscription account, and inspect usage with `/stats model`. This keeps the
-subscription inside Google’s intended CLI surface and supports its multimodal
-features.
+subscription account, and inspect usage with `/stats model`. For a one-off batch,
+the supported CLI also has headless mode (for example, `gemini -p "..."
+--output-format json --stats`). Copy the resulting report into NanoClaw as an
+ordinary file if the assistant should summarize it. This keeps the subscription
+inside Google’s intended CLI surface and supports its multimodal features
+without giving the daemon the OAuth session.
 
 ## Automation boundary
 
