@@ -11,6 +11,6 @@ Use the Google Drive skill to list the archive folder. Consider only new `whatsa
 
 For each source, extract only useful group-level information: decisions, commitments, deadlines, blockers, project updates, and recurring themes. Do not copy raw messages. Write or update a compact dated digest in `whatsapp/<group-slug>/YYYY-MM-DD.md`; use the source file ID, modified time, and group label in frontmatter. Update durable project, task, decision, or topic pages only when the fact is supported and worth retaining.
 
-Every page must have frontmatter with `type`, `title`, `description`, `tags`, `generated`, and `sources`. Use Markdown links in `index.md` and reciprocal `## Backlinks` for related concepts. Preserve human-written material. Never include raw chat logs, phone numbers, credentials, or speculative claims.
+Every page must have frontmatter with `type`, `title`, `description`, `tags`, `generated`, and `sources`. Add a Markdown link or backlink only when its target page exists in the canonical wiki; create the supported target page first if needed. Preserve human-written material. Never include raw chat logs, phone numbers, credentials, or speculative claims.
 
 After each pass, append a concise operational entry to `log.md`. If no archive source changed, make no wiki-content changes.

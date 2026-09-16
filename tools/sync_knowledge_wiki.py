@@ -9,10 +9,11 @@ from gdrive_assistant import service, writer_parent
 from googleapiclient.http import MediaFileUpload
 
 
-def local_files(root: Path, excluded: set[str]) -> list[Path]:
+def local_files(root: Path, excluded: set[str], included: set[str]) -> list[Path]:
     return sorted(
         path for path in root.rglob("*")
-        if path.is_file() and path.name != ".drive-sync.json" and not (set(path.relative_to(root).parts) & excluded)
+        if path.is_file() and not path.name.startswith(".") and not (set(path.relative_to(root).parts) & excluded)
+        and (not included or path.relative_to(root).parts[0] in included)
     )
 
 
@@ -43,6 +44,8 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--drive-folder", required=True)
     parser.add_argument("--exclude-dir", action="append", default=[])
+    parser.add_argument("--include-dir", action="append", default=[])
+    parser.add_argument("--state-file", type=Path)
     args = parser.parse_args()
     root = args.source.resolve()
     if not root.is_dir():
@@ -50,10 +53,10 @@ def main() -> None:
 
     drive = service("writer", authorize=False)
     target = writer_parent(drive, args.drive_folder)
-    state_path = root / ".drive-sync.json"
+    state_path = args.state_file or root / ".drive-sync.json"
     state = load_state(state_path)
     folders = {Path("."): target}
-    for file_path in local_files(root, set(args.exclude_dir)):
+    for file_path in local_files(root, set(args.exclude_dir), set(args.include_dir)):
         relative = file_path.relative_to(root)
         parent = Path(".")
         for part in relative.parts[:-1]:

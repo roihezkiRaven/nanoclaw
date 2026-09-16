@@ -16,7 +16,7 @@ The two maintenance agents are not exposed on Slack or Telegram. The Personal As
 
 - `data/timeless-wiki/`: canonical local Markdown knowledge graph. It contains `index.md`, source-grounded concept pages, the operational `log.md`, and per-source ingestion checkpoints.
 - `Timeless Knowledge` Drive folder: a mirrored, human-browsable copy of the Timeless portion of the local graph. The sync state file remains local and is never mirrored.
-- `WhatsApp Knowledge` Drive folder: a separate mirrored, human-browsable copy of concise WhatsApp group digests. It never contains raw archives.
+- `WhatsApp Knowledge` Drive folder: a separate mirrored, human-browsable copy of concise WhatsApp group digests and their linked project, topic, task, decision, and people pages. It never contains raw archives.
 - `WhatsApp Archive` Drive folder: raw text-only JSONL batches created by the collector. It is source material, not a user-facing knowledge base.
 - `store/whatsapp-collector/`: local delivery queue, deduplication state, and heartbeat. It holds no long-term wiki content.
 - `store/whatsapp-collector-auth/` and `config/google/`: protected authentication material. They are ignored by Git and must never be copied into prompts, docs, logs, or commits.
