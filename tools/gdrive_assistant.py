@@ -113,10 +113,11 @@ def writer_parent(api, requested_parent: str | None) -> str:
     root = env_value("GOOGLE_WRITER_FOLDER_ID")
     if not root:
         raise RuntimeError("GOOGLE_WRITER_FOLDER_ID is not configured")
-    current = requested_parent or root
+    requested = requested_parent or root
+    current = requested
     for _ in range(10):
         if current == root:
-            return current
+            return requested
         meta = api.files().get(fileId=current, fields="mimeType,parents", supportsAllDrives=True).execute()
         if meta.get("mimeType") != "application/vnd.google-apps.folder":
             raise RuntimeError("parent must be a folder inside the writer folder")

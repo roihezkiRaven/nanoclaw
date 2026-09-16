@@ -59,7 +59,12 @@ def main() -> None:
         media = MediaFileUpload(str(file_path), mimetype="text/markdown", resumable=False)
         body = {"name": relative.name, "parents": [folders[parent]], "mimeType": "text/markdown"}
         if relative.as_posix() in state:
-            drive.files().update(fileId=state[relative.as_posix()], body={"name": relative.name}, media_body=media).execute()
+            current = drive.files().get(fileId=state[relative.as_posix()], fields="parents").execute().get("parents", [])
+            drive.files().update(
+                fileId=state[relative.as_posix()], body={"name": relative.name}, media_body=media,
+                addParents=folders[parent] if folders[parent] not in current else None,
+                removeParents=",".join(current) if folders[parent] not in current else None,
+            ).execute()
         else:
             state[relative.as_posix()] = drive.files().create(body=body, media_body=media, fields="id").execute()["id"]
     temporary = state_path.with_suffix(".tmp")
