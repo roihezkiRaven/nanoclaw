@@ -12,7 +12,7 @@ from googleapiclient.http import MediaFileUpload
 def local_files(root: Path, excluded: set[str], included: set[str]) -> list[Path]:
     return sorted(
         path for path in root.rglob("*")
-        if path.is_file() and not path.name.startswith(".") and not (set(path.relative_to(root).parts) & excluded)
+        if path.is_file() and path.suffix == ".md" and not path.name.startswith(".") and not (set(path.relative_to(root).parts) & excluded)
         and (not included or path.relative_to(root).parts[0] in included)
     )
 
