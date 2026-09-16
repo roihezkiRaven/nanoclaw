@@ -2,9 +2,9 @@
 okf_version: "0.2"
 ---
 
-# Timeless Knowledge
+# Personal Knowledge
 
-Source-grounded, durable knowledge distilled from the owner's Timeless Drive folder.
+Source-grounded, durable knowledge distilled from eligible Timeless notes and allow-listed WhatsApp group digests.
 This is an index and graph entry point, not a transcript archive.
 
 ## Topic map
@@ -14,6 +14,7 @@ This is an index and graph entry point, not a transcript archive.
 - Decisions: `decisions/`
 - Tasks and commitments: `tasks/`
 - Recurring themes: `topics/`
+- WhatsApp group digests: `whatsapp/`
 
 ## Rules
 
