@@ -340,6 +340,26 @@ describe('groups config (host-only)', () => {
     expect(JSON.parse((await getContainerConfig(GID))!.additional_mounts)).toEqual([]);
   });
 
+  it('records mounts as read-write unless --ro is specified', async () => {
+    const GID = 'ag-mount-rw';
+    await createAgentGroup({ id: GID, name: 'm', folder: 'm', agent_provider: null, created_at: now() });
+    await ensureContainerConfig(GID);
+
+    const resp = await dispatch(
+      {
+        id: 'rw-mount',
+        command: 'groups-config-add-mount',
+        args: { id: GID, host: '/data/wiki', container: 'wiki' },
+      },
+      { caller: 'host' },
+    );
+
+    expect(resp.ok).toBe(true);
+    expect(JSON.parse((await getContainerConfig(GID))!.additional_mounts)).toEqual([
+      { hostPath: '/data/wiki', containerPath: 'wiki', readonly: false },
+    ]);
+  });
+
   describe("--speed validates against the tiers the group's provider declares", () => {
     const GID = 'ag-speed';
     const speedOf = async (): Promise<string | null> => (await getContainerConfig(GID))!.speed;
