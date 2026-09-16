@@ -357,7 +357,7 @@ directories must exist in the shipped plugin.
 Credentials are held by the **credentials proxy** and injected into outbound
 HTTPS calls at the proxy boundary, matched by API host, at request time. The key
 never sits in `mcp.json`, the container env, or chat context. See
-[the credentials proxy section in CLAUDE.md](../CLAUDE.md#secrets--credentials--onecli)
+[the credentials proxy section in CLAUDE.md](../../CLAUDE.md#secrets--credentials--onecli)
 for the model.
 
 Two ways a credential gets connected:
@@ -409,7 +409,7 @@ human to approve it before it leaves the proxy: enforcement the agent can't talk
 around. This is matched on the outbound HTTP request (host + method + path),
 configured on the credentials proxy, and answered by NanoClaw (it DMs an approver). The host side is
 already wired; see
-[the credentialed-approval flow in CLAUDE.md](../CLAUDE.md#requiring-approval-for-credential-use)
+[the credentialed-approval flow in CLAUDE.md](../../CLAUDE.md#requiring-approval-for-credential-use)
 and the [`sales/sdr` template README](https://github.com/nanocoai/nanoclaw-templates/blob/main/sales/sdr/README.md)
 for a worked example.
 

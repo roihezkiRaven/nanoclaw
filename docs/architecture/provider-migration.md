@@ -1,1 +1,3 @@
-../migrations/provider-migration.md
+ # Compatibility link
+
+See [the canonical document](../migrations/provider-migration.md).

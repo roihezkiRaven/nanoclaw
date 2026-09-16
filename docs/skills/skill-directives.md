@@ -4,7 +4,7 @@ The structured skill format: how a SKILL.md carries its mechanical steps as mach
 
 **Who this is for.** This format is core tooling for the trunk channel/provider install skills — the ones the setup wizard drives (`/add-slack`, `/add-telegram`, …). Those skills carry `nc:` fences so a deterministic engine (`scripts/skill-apply.ts`) and the setup wizard can apply them programmatically, and the conformance suite holds them to it. **A contributed skill does not need any of this.** Contributions are held to the standard bar in [skill-guidelines.md](skill-guidelines.md) — prose an agent can run, tests, REMOVE.md. Adopting `nc:` fences in a contributed skill is welcome but entirely optional; if you do, run the lint (below) and follow this reference.
 
-Engineering source of truth: the header comment in [`scripts/skill-directives.ts`](../scripts/skill-directives.ts) (grammar + lint) — this document is its author-facing distillation. The engine's consumer contract (what a wizard, pipeline, or agent-relay plugs into) is [skill-engine-seam.md](skill-engine-seam.md).
+Engineering source of truth: the header comment in [`scripts/skill-directives.ts`](../../scripts/skill-directives.ts) (grammar + lint) — this document is its author-facing distillation. The engine's consumer contract (what a wizard, pipeline, or agent-relay plugs into) is [skill-engine-seam.md](skill-engine-seam.md).
 
 ## Two readers, one document
 

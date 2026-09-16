@@ -1,6 +1,6 @@
 # Branch and fork maintenance
 
-How the long-lived branches on `nanocoai/nanoclaw` relate to `main` and how to keep them in sync. This is the maintainer view: [skills-model.md](skills-model.md) explains the customization model itself, and [CONTRIBUTING.md](../CONTRIBUTING.md) covers contributing a channel or provider.
+How the long-lived branches on `nanocoai/nanoclaw` relate to `main` and how to keep them in sync. This is the maintainer view: [skills-model.md](../skills/skills-model.md) explains the customization model itself, and [CONTRIBUTING.md](../../CONTRIBUTING.md) covers contributing a channel or provider.
 
 ## Structure
 
@@ -66,7 +66,7 @@ After any main change that touches shared files (`package.json`, `src/index.ts`,
 
 ## Adding a new channel or provider
 
-Skills replaced fork setup. The short version ([CONTRIBUTING.md](../CONTRIBUTING.md) has the full flow):
+Skills replaced fork setup. The short version ([CONTRIBUTING.md](../../CONTRIBUTING.md) has the full flow):
 
 1. Build the adapter or provider following [skill-guidelines.md](skill-guidelines.md): a self-registering module, one appended barrel import, and a registration test that imports the real barrel.
 2. Write the `/add-<name>` skill in `.claude/skills/` on `main` — a SKILL.md with the fetch-and-copy steps and a REMOVE.md that reverses them.

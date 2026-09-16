@@ -1,1 +1,3 @@
-../reference/agent-runner-details.md
+ # Compatibility link
+
+See [the canonical document](../reference/agent-runner-details.md).

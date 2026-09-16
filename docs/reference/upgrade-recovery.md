@@ -1,1 +1,3 @@
-../migrations/upgrade-recovery.md
+ # Compatibility link
+
+See [the canonical document](../migrations/upgrade-recovery.md).

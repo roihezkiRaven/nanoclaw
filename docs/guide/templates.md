@@ -1,1 +1,3 @@
-../skills/templates.md
+ # Compatibility link
+
+See [the canonical document](../skills/templates.md).
