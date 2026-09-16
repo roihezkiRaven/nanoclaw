@@ -2,8 +2,8 @@
 const http = require('http');
 
 const action = process.argv[2];
-if (!['search', 'read', 'write', 'mkdir', 'calendar'].includes(action)) {
-  console.error('usage: gdrive.js <search|read|write|mkdir|calendar>');
+if (!['search', 'tree', 'read', 'write', 'mkdir', 'calendar'].includes(action)) {
+  console.error('usage: gdrive.js <search|tree|read|write|mkdir|calendar>');
   process.exit(2);
 }
 

@@ -7,7 +7,7 @@ description: Maintain concise WhatsApp group digests and durable knowledge from 
 
 The canonical shared wiki is `/workspace/extra/timeless-wiki/`. The only permitted source is the collector archive folder specified by the scheduled task. Do not use WhatsApp Web, credentials, or any messaging tool.
 
-Use the Google Drive skill to list the archive folder. Consider only new `whatsapp-raw-*.jsonl` files whose Drive ID and modified time are absent or changed in `/workspace/extra/timeless-wiki/whatsapp-ingestion.json`. Process every eligible source individually, one at a time, without a numerical cap. After a source's durable update succeeds, checkpoint it immediately, so an interrupted run resumes safely.
+Use the Google Drive skill's `tree` operation with `max_depth: 0` and a limit large enough for the complete folder to enumerate the archive folder; do not use a capped search or assume the first page is complete. Consider only new `whatsapp-raw-*.jsonl` files whose Drive ID and modified time are absent or changed in `/workspace/extra/timeless-wiki/whatsapp-ingestion.json`. Process every eligible source individually, one at a time, without a numerical cap. After a source's durable update succeeds, checkpoint it immediately, so an interrupted run resumes safely.
 
 For each source, first parse every JSONL record and partition the records by
 `groupJid`. You must handle every distinct group represented in the source;
