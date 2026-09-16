@@ -31,8 +31,10 @@ meeting notes in Google Docs, Sheets, or plaintext. It excludes transcripts,
 recordings, audio, video, and raw media. Each successful source is checkpointed
 immediately so a failed run resumes without a hard source cap.
 
-WhatsApp processing reads only the allow-listed collector archive, produces
-compact dated group digests, and never copies raw messages into the graph.
+WhatsApp processing reads only the allow-listed collector archive, partitions
+every batch by group, produces substantive dated group digests only under
+`whatsapp/`, and never copies raw messages or promotes pages into the Timeless
+`projects/`, `topics/`, `tasks/`, `people/`, or `decisions/` directories.
 
 Daily validation checks source fingerprints, malformed frontmatter, duplicate
 pages, unresolved backlinks, and stale checkpoints. Drive mirrors export only

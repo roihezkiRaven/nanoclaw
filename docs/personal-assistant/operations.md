@@ -8,7 +8,7 @@ This document describes the deployed personal-assistant data flows. It intention
 | --- | --- | --- | --- |
 | Personal Assistant | GPT-5.6 Terra | low | Conversational interface; reads the shared knowledge wiki only. |
 | Timeless Brain | GPT-5.6 Luna | medium | Reads eligible Timeless notes and updates the shared wiki. |
-| WhatsApp Brain | GPT-5.6 Luna | medium | Reads only the collector archive and updates the shared wiki. |
+| WhatsApp Brain | GPT-5.6 Luna | medium | Reads only the collector archive and updates the isolated WhatsApp wiki subtree. |
 
 The two maintenance agents are not exposed on Slack or Telegram. The Personal Assistant has a read-only mount of the wiki; each maintenance agent has the one explicitly allow-listed read/write mount.
 
@@ -16,7 +16,7 @@ The two maintenance agents are not exposed on Slack or Telegram. The Personal As
 
 - `data/timeless-wiki/`: canonical local Markdown knowledge graph. It contains `index.md`, source-grounded concept pages, the operational `log.md`, and per-source ingestion checkpoints.
 - `Timeless Knowledge` Drive folder: a mirrored, human-browsable copy of the Timeless portion of the local graph. The sync state file remains local and is never mirrored.
-- `WhatsApp Knowledge` Drive folder: a separate mirrored, human-browsable copy of concise WhatsApp group digests and their linked project, topic, task, decision, and people pages. It never contains raw archives.
+- `WhatsApp Knowledge` Drive folder: a separate mirrored, human-browsable copy of WhatsApp group digests only. It never contains Timeless projects/topics/tasks or raw archives.
 - `WhatsApp Archive` Drive folder: raw text-only JSONL batches created by the collector. It is source material, not a user-facing knowledge base.
 - `store/whatsapp-collector/`: local delivery queue, deduplication state, and heartbeat. It holds no long-term wiki content.
 - `store/whatsapp-collector-auth/` and `config/google/`: protected authentication material. They are ignored by Git and must never be copied into prompts, docs, logs, or commits.
@@ -33,11 +33,11 @@ Pages are compact and linked by topic, project, decision, task, or person. Each 
 
 The collector is a user-level systemd service. It connects through the linked WhatsApp account, accepts only configured group JIDs, ignores outgoing messages and all non-text content, queues records durably, and uploads batches to `WhatsApp Archive`. Failed uploads stay queued for retry. It does not backfill old chat history.
 
-At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each new JSONL batch individually. It writes concise dated group digests plus supported durable decisions, tasks, blockers, and themes into the shared wiki. It does not retain raw chat text, phone numbers, or credentials in the graph and cannot send WhatsApp messages.
+At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each new JSONL batch individually. It partitions every batch by group and writes substantive dated digests only below `whatsapp/`. It does not update Timeless projects, topics, tasks, people, or decisions, and does not retain raw chat text, phone numbers, or credentials in the graph. It cannot send WhatsApp messages.
 
 ### Drive mirror
 
-At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors WhatsApp digests to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after both maintenance jobs.
+At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors only the local `whatsapp/` subtree to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after both maintenance jobs.
 
 ## Operating safely
 
