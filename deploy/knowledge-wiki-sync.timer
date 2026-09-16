@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily personal knowledge wiki Drive mirror
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
