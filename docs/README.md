@@ -1,38 +1,49 @@
 # NanoClaw documentation
 
-Start here. This directory has both the upstream engineering references and the documents for this deployed personal assistant.
+This directory is organized by how the system is used. The former top-level
+paths remain as compatibility symlinks.
 
 ## Personal assistant
 
-- [Operations](personal-assistant/operations.md): deployed channels, data retained, Brain schedules, models, Drive mirrors, and safe operating procedures.
+- [Operations](personal-assistant/operations.md) — deployed channels, retained data, schedules, and recovery.
+- [Autonomy](personal-assistant/autonomy.md) — chat-controlled changes and approval boundaries.
+- [Knowledge base](personal-assistant/knowledge-base.md) — OKF graph, Timeless notes, WhatsApp digests, and Drive mirrors.
+- [Updates](personal-assistant/updates.md) — personal-fork drift checks and transactional VPS upgrades.
+- [Gemini](personal-assistant/gemini.md) — compliant use of the separate Gemini subscription.
 
-## Run and operate NanoClaw
+## Guide
 
-- [Setup flow](setup-flow.md) and [setup wiring](setup-wiring.md)
-- [Build and runtime](build-and-runtime.md)
-- [Scheduled tasks](scheduled-tasks.md)
-- [Security model](SECURITY.md)
-- [Upgrade recovery](upgrade-recovery.md)
+- [Setup flow](guide/setup-flow.md) · [setup wiring](guide/setup-wiring.md)
+- [Build and runtime](guide/build-and-runtime.md) · [scheduled tasks](guide/scheduled-tasks.md)
+- [Customizing](guide/customizing.md) · [requirements](guide/REQUIREMENTS.md)
+- [Community portal](guide/community-portal.md) · [Ollama](guide/ollama.md)
 
-## Understand the system
+## Architecture
 
-- [Architecture](architecture.md) and [architecture diagram](architecture-diagram.md)
-- [Database overview](db.md), [central DB](db-central.md), and [session DB](db-session.md)
-- [Isolation model](isolation-model.md)
-- [Memory](memory.md)
+- [Architecture](architecture/architecture.md) · [diagram](architecture/architecture-diagram.md)
+- [Database overview](architecture/db.md) · [central DB](architecture/db-central.md) · [session DB](architecture/db-session.md)
+- [Isolation](architecture/isolation-model.md) · [memory](architecture/memory.md) · [historical v1 spec](architecture/SPEC.md)
 
-## Customize it
+## Security
 
-- [Customizing](customizing.md)
-- [Skills model](skills-model.md) and [skill guidelines](skill-guidelines.md)
-- [Templates](templates.md)
-- [Branch and fork maintenance](BRANCH-FORK-MAINTENANCE.md)
+- [Security model](security/SECURITY.md) · [hardened images](security/hardened-image.md)
 
-## Migration and deep references
+## Skills
 
-- [v1 to v2 changes](v1-to-v2-changes.md)
-- [Provider migration](provider-migration.md)
-- [Host lifecycle migration](host-lifecycle-migration.md)
-- [SDK deep dive](SDK_DEEP_DIVE.md)
+- [Skills model](skills/skills-model.md) · [authoring guidelines](skills/skill-guidelines.md)
+- [Directive format](skills/skill-directives.md) · [engine seam](skills/skill-engine-seam.md) · [templates](skills/templates.md)
 
-The official, current product documentation is at [docs.nanoclaw.dev](https://docs.nanoclaw.dev). The remaining files here are retained upstream design documents and detailed developer references.
+## Migrations
+
+- [Upgrade recovery](migrations/upgrade-recovery.md) · [v1 to v2](migrations/v1-to-v2-changes.md)
+- [Provider](migrations/provider-migration.md) · [host lifecycle](migrations/host-lifecycle-migration.md)
+- [Task](migrations/ncl-tasks-migration.md) · [mailbox](migrations/agent-mailbox-seam-migration.md)
+- [Database async](migrations/central-db-async-migration.md) · [development](migrations/migration-dev.md)
+
+## Reference
+
+- [API details](reference/api-details.md) · [agent runner](reference/agent-runner-details.md)
+- [SDK deep dive](reference/SDK_DEEP_DIVE.md) · [OneCLI upgrades](reference/onecli-upgrades.md)
+- [Fork maintenance](reference/BRANCH-FORK-MAINTENANCE.md)
+
+The official product documentation is at [docs.nanoclaw.dev](https://docs.nanoclaw.dev).

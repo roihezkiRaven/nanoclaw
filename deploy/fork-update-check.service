@@ -1,0 +1,12 @@
+[Unit]
+Description=Check NanoClaw personal-fork drift (read-only)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=assistant
+WorkingDirectory=/home/assistant/nanoclaw
+ExecStart=/home/assistant/nanoclaw/node_modules/.bin/tsx /home/assistant/nanoclaw/scripts/check-fork-update.ts /home/assistant/nanoclaw
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

@@ -11,7 +11,17 @@ Before writing, use the Google Drive skill to inventory the approved Timeless ro
 
 Maintain `ingestion.json` with each processed Drive file ID and modified time. Process sources individually, one at a time, and do not impose a numerical source cap. After each source's durable wiki update succeeds, checkpoint it immediately. This makes interrupted runs resumable without reprocessing completed notes.
 
-Create or update small Markdown pages in `people/`, `projects/`, `decisions/`, `tasks/`, or `topics/`. Every page must have frontmatter with `type`, `title`, `description`, `tags`, `generated`, and `sources`. Each `sources` entry must use the original Drive URL or ID and its observed modified time. Mark interpretation as inferred; never present it as an explicit source fact.
+Create or update small Markdown pages in the existing `people/`, `projects/`,
+`decisions/`, `tasks/`, or `topics/` folders. Meeting notes may additionally be
+indexed under `meetings/` when that folder exists; do not move or rename any
+existing page. Every page must have frontmatter with `type`, `title`,
+`description`, `tags`, `generated`, and `sources`. Each `sources` entry must use
+the original Drive URL or ID and its observed modified time. Mark interpretation
+as inferred; never present it as an explicit source fact.
+
+Use `inbox/`, `raw/`, `daily/`, `areas/`, `templates/`, and `archive/` only as
+additive folders. Keep raw source notes immutable, preserve human-authored
+content, and link derived pages back to their source rather than duplicating it.
 
 Keep one concept per page. Link every page from `index.md`, use ordinary Markdown links, and add reciprocal links under `## Backlinks` when pages relate. Preserve human-written material. Do not store raw sensitive chat content, credentials, or speculative claims.
 
