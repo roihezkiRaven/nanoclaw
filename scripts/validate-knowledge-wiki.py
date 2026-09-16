@@ -11,6 +11,7 @@ from pathlib import Path
 
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)")
 REQUIRED = {"type", "title", "description", "tags", "generated", "sources"}
+WHATSAPP_FORBIDDEN_LINKS = ("../projects/", "../topics/", "../tasks/", "../people/", "../decisions/")
 
 
 def frontmatter(text: str) -> dict[str, str] | None:
@@ -32,16 +33,30 @@ def validate(root: Path) -> list[str]:
     for path in sorted(root.rglob("*.md")):
         text = path.read_text(encoding="utf-8")
         meta = frontmatter(text)
-        if meta is not None and meta.get("generated", "").lower() == "true":
+        relative = path.relative_to(root)
+        is_log_or_root_index = relative.as_posix() in {"index.md", "log.md", "whatsapp/log.md"}
+        if not is_log_or_root_index:
+            if meta is None:
+                errors.append(f"{relative}: missing frontmatter")
+                continue
             missing = sorted(REQUIRED - meta.keys())
             if missing:
-                errors.append(f"{path.relative_to(root)}: missing frontmatter: {', '.join(missing)}")
+                errors.append(f"{relative}: missing frontmatter: {', '.join(missing)}")
+            if relative.parts[0] == "whatsapp":
+                missing_provenance = sorted({"group_label", "group_jid"} - meta.keys())
+                if missing_provenance:
+                    errors.append(f"{relative}: missing WhatsApp provenance: {', '.join(missing_provenance)}")
+        if relative.parts[0] == "whatsapp":
+            if any(link in text for link in WHATSAPP_FORBIDDEN_LINKS):
+                errors.append(f"{relative}: links into Timeless graph")
+        elif "whatsapp/" in text:
+            errors.append(f"{relative}: references WhatsApp knowledge")
         for target in LINK_RE.findall(text):
             if target.startswith(("http://", "https://", "mailto:")):
                 continue
             resolved = (path.parent / target).resolve()
             if not resolved.exists():
-                errors.append(f"{path.relative_to(root)}: broken link: {target}")
+                errors.append(f"{relative}: broken link: {target}")
     for checkpoint in root.glob("*ingestion.json"):
         try:
             json.loads(checkpoint.read_text(encoding="utf-8"))

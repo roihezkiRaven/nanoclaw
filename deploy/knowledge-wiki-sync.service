@@ -5,7 +5,9 @@ After=network-online.target gdrive-broker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/home/assistant/nanoclaw
-ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/sync_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki --drive-folder 12T_HdnBxiTqumlH3xocA88MTu3gJeu3Y --exclude-dir whatsapp
+EnvironmentFile=/home/assistant/nanoclaw/.env
+ExecStartPre=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/scripts/validate-knowledge-wiki.py /home/assistant/nanoclaw/data/timeless-wiki
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/sync_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki --drive-folder ${TIMELESS_KNOWLEDGE_FOLDER_ID} --exclude-dir whatsapp
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

@@ -25,7 +25,7 @@ The two maintenance agents are not exposed on Slack or Telegram. The Personal As
 
 ### Timeless
 
-At 02:30 UTC each day, Timeless Brain inventories the approved Timeless root and handles every changed eligible note individually. Eligible inputs are plaintext, Google Docs, and Google Sheets used as notes. It excludes transcripts, recordings, audio/video, and raw-media sources. After each successful source update it checkpoints that Drive file ID and modified time, so interrupted work resumes without reprocessing completed notes.
+At 02:30 UTC each day, Timeless Brain inventories the approved Timeless root and handles every changed eligible note individually. Eligible inputs are plaintext, Google Docs, and Google Sheets used as notes. It excludes transcripts, recordings, audio/video, raw-media sources, WhatsApp Archive files, and WhatsApp-derived digests. It never links to or promotes WhatsApp material into the Timeless graph. After each successful source update it checkpoints that Drive file ID and modified time, so interrupted work resumes without reprocessing completed notes.
 
 Pages are compact and linked by topic, project, decision, task, or person. Each factual page records Drive provenance and marks inferences. The Brain never changes source Drive files or sends messages.
 

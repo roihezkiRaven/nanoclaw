@@ -28,8 +28,10 @@ observed modified time. Facts and inferences are labeled separately.
 
 Timeless processing reads every changed eligible note individually, including
 meeting notes in Google Docs, Sheets, or plaintext. It excludes transcripts,
-recordings, audio, video, and raw media. Each successful source is checkpointed
-immediately so a failed run resumes without a hard source cap.
+recordings, audio, video, raw media, the WhatsApp Archive, and WhatsApp-derived
+digests. It never reads, links to, or promotes WhatsApp material into the
+Timeless graph. Each successful source is checkpointed immediately so a failed
+run resumes without a hard source cap.
 
 WhatsApp processing reads only the allow-listed collector archive, partitions
 every batch by group, produces substantive dated group digests only under
