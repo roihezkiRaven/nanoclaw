@@ -9,8 +9,11 @@ from gdrive_assistant import service, writer_parent
 from googleapiclient.http import MediaFileUpload
 
 
-def local_files(root: Path) -> list[Path]:
-    return sorted(path for path in root.rglob("*") if path.is_file() and path.name != ".drive-sync.json")
+def local_files(root: Path, excluded: set[str]) -> list[Path]:
+    return sorted(
+        path for path in root.rglob("*")
+        if path.is_file() and path.name != ".drive-sync.json" and not (set(path.relative_to(root).parts) & excluded)
+    )
 
 
 def child_folder(drive, parent_id: str, name: str) -> str:
@@ -39,6 +42,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--drive-folder", required=True)
+    parser.add_argument("--exclude-dir", action="append", default=[])
     args = parser.parse_args()
     root = args.source.resolve()
     if not root.is_dir():
@@ -49,7 +53,7 @@ def main() -> None:
     state_path = root / ".drive-sync.json"
     state = load_state(state_path)
     folders = {Path("."): target}
-    for file_path in local_files(root):
+    for file_path in local_files(root, set(args.exclude_dir)):
         relative = file_path.relative_to(root)
         parent = Path(".")
         for part in relative.parts[:-1]:

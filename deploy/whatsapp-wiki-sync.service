@@ -1,0 +1,14 @@
+[Unit]
+Description=Mirror WhatsApp knowledge digests to Google Drive
+After=network-online.target gdrive-broker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/assistant/nanoclaw
+EnvironmentFile=/home/assistant/nanoclaw/.env
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/sync_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki/whatsapp --drive-folder ${WHATSAPP_KNOWLEDGE_FOLDER_ID}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/assistant/nanoclaw/data/timeless-wiki /home/assistant/nanoclaw/config/google
+

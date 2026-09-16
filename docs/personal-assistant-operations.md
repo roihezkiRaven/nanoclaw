@@ -15,7 +15,8 @@ The two maintenance agents are not exposed on Slack or Telegram. The Personal As
 ## Data kept and where
 
 - `data/timeless-wiki/`: canonical local Markdown knowledge graph. It contains `index.md`, source-grounded concept pages, the operational `log.md`, and per-source ingestion checkpoints.
-- `Timeless Knowledge` Drive folder: a mirrored, human-browsable copy of the local graph. The sync state file remains local and is never mirrored.
+- `Timeless Knowledge` Drive folder: a mirrored, human-browsable copy of the Timeless portion of the local graph. The sync state file remains local and is never mirrored.
+- `WhatsApp Knowledge` Drive folder: a separate mirrored, human-browsable copy of concise WhatsApp group digests. It never contains raw archives.
 - `WhatsApp Archive` Drive folder: raw text-only JSONL batches created by the collector. It is source material, not a user-facing knowledge base.
 - `store/whatsapp-collector/`: local delivery queue, deduplication state, and heartbeat. It holds no long-term wiki content.
 - `store/whatsapp-collector-auth/` and `config/google/`: protected authentication material. They are ignored by Git and must never be copied into prompts, docs, logs, or commits.
@@ -36,7 +37,7 @@ At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each
 
 ### Drive mirror
 
-At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local wiki pages to `Timeless Knowledge`. It uses the restricted writer credential and updates only Drive files it created. It is intentionally after both maintenance jobs.
+At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors WhatsApp digests to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after both maintenance jobs.
 
 ## Operating safely
 
