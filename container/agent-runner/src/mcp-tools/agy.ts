@@ -3,6 +3,19 @@ import { registerTools } from './server.js';
 import type { McpToolDefinition } from './types.js';
 
 const MODEL_RE = /^(?:gemini|claude|gpt-oss)-[a-z0-9][a-z0-9._-]{0,79}$/i;
+const AGY_MODELS = new Set([
+  'gemini-3.8-flash-high',
+  'gemini-3.8-flash-medium',
+  'gemini-3.8-flash-low',
+  'gemini-3.7-flash-high',
+  'gemini-3.7-flash-medium',
+  'gemini-3.7-flash-low',
+  'gemini-3.6-flash-high',
+  'gemini-3.6-flash-medium',
+  'gemini-3.6-flash-low',
+  'gemini-3.1-pro-high',
+  'gemini-3.1-pro-low',
+]);
 const EFFORTS = new Set(['low', 'medium', 'high']);
 const MAX_PROMPT_CHARS = 24_000;
 
@@ -55,7 +68,8 @@ export const runAgy: McpToolDefinition = {
     if (!prompt) return err('prompt is required');
     if (prompt.length > MAX_PROMPT_CHARS) return err(`prompt exceeds ${MAX_PROMPT_CHARS} characters`);
     const model = typeof args.model === 'string' ? args.model.trim() : undefined;
-    if (model && !MODEL_RE.test(model)) return err('invalid model name');
+    if (model && (!MODEL_RE.test(model) || !AGY_MODELS.has(model)))
+      return err('model is not in the approved Gemini catalog');
     const effort = typeof args.effort === 'string' ? args.effort.toLowerCase() : undefined;
     if (effort && !EFFORTS.has(effort)) return err('effort must be low, medium, or high');
     try {

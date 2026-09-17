@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import type { CallerContext } from '../frame.js';
 import { register } from '../registry.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
+import { AGY_MODELS } from '../../model-catalog.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_PROMPT_BYTES = 32 * 1024;
@@ -27,7 +28,9 @@ function parseAgyArgs(raw: Record<string, unknown>) {
     throw new Error(`--prompt exceeds ${MAX_PROMPT_BYTES} bytes`);
   }
   const model = stringArg(raw, 'model');
-  if (model && !MODEL_RE.test(model)) throw new Error('invalid Antigravity model name');
+  if (model && (!MODEL_RE.test(model) || !AGY_MODELS.includes(model as (typeof AGY_MODELS)[number]))) {
+    throw new Error('model is not in the approved Gemini Antigravity catalog');
+  }
   const effort = stringArg(raw, 'effort')?.toLowerCase();
   if (effort && !EFFORTS.has(effort)) throw new Error('--effort must be low, medium, or high');
   return { prompt, model, effort };
