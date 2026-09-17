@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 
 import type { CallerContext } from '../frame.js';
 import { register } from '../registry.js';
+import { getAgentGroup } from '../../db/agent-groups.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_PROMPT_BYTES = 32 * 1024;
@@ -41,6 +42,10 @@ type AgyResponse = {
 
 async function runAgy(args: ReturnType<typeof parseAgyArgs>, ctx: CallerContext) {
   if (ctx.caller !== 'agent') throw new Error('agy-run is only available from an agent session');
+  const group = await getAgentGroup(ctx.agentGroupId);
+  if (group?.folder !== 'personal-assistant') {
+    throw new Error('agy-run is only available to the Personal Assistant master group');
+  }
   const cwd = await mkdtemp(`${tmpdir()}/nanoclaw-agy-`);
   try {
     const cliArgs = ['-p', args.prompt, '--output-format', 'json', '--sandbox'];
