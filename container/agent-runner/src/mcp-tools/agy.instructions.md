@@ -1,6 +1,6 @@
 ## Antigravity worker (`run_agy`)
 
-Use `run_agy` as a session-scoped sub-agent for research, multimodal interpretation, drafting, and file work. It runs the owner-authenticated `agy` CLI on the host with the current session workspace mounted. AGY may inspect and edit files in that workspace, but host credentials, Drive mounts, WhatsApp credentials, GitHub credentials, NanoClaw databases, and other sessions are not mounted. For privileged NanoClaw operations, use the normal NanoClaw tools.
+Use `run_agy` as a session-scoped sub-agent for research, multimodal interpretation, drafting, and file work. It runs the owner-authenticated `agy` CLI on the host with the current session workspace and this agent group's workspace mounted. AGY can use the group's skills, memory, and task files, but host credentials, Drive mounts, WhatsApp credentials, GitHub credentials, NanoClaw databases, and other sessions are not mounted. For privileged NanoClaw operations, use the normal NanoClaw tools.
 
 The prompt is sent to Google through the Antigravity subscription session. Do not include secrets unless the user explicitly asked for that data to be processed. Prefer `gemini-3.7-flash-medium` or another explicit model when the task needs a predictable model. The result includes usage metadata.
 

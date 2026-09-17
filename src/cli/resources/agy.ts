@@ -10,6 +10,7 @@ import { register } from '../registry.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
 import { AGY_MODELS } from '../../model-catalog.js';
 import { sessionDir } from '../../session-manager.js';
+import { GROUPS_DIR } from '../../config.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_PROMPT_BYTES = 32 * 1024;
@@ -85,7 +86,18 @@ async function runAgy(args: ReturnType<typeof parseAgyArgs>, ctx: CallerContext)
   }
   if (!ctx.sessionId) throw new Error('agy-run requires a session context');
   const workspace = sessionDir(ctx.agentGroupId, ctx.sessionId);
-  const cliArgs = ['-p', args.prompt, '--output-format', 'json', '--sandbox', '--add-dir', workspace];
+  const groupWorkspace = path.join(GROUPS_DIR, group.folder);
+  const cliArgs = [
+    '-p',
+    args.prompt,
+    '--output-format',
+    'json',
+    '--sandbox',
+    '--add-dir',
+    workspace,
+    '--add-dir',
+    groupWorkspace,
+  ];
   if (args.model) cliArgs.push('--model', args.model);
   if (args.effort) cliArgs.push('--effort', args.effort);
   const { stdout } = await execFileAsync(process.env.AGY_BIN || '/home/assistant/.local/bin/agy', cliArgs, {
@@ -112,7 +124,7 @@ async function runAgy(args: ReturnType<typeof parseAgyArgs>, ctx: CallerContext)
     duration_seconds: parsed.duration_seconds ?? null,
     usage: parsed.usage ?? null,
     model: args.model ?? 'subscription default',
-    note: 'Executed in the current session workspace. AGY may inspect and edit files there, but host credentials, Drive mounts, databases, and other sessions are not exposed.',
+    note: 'Executed with the current session and Personal Assistant group workspace mounted. AGY may inspect and edit those files, including group skills and memory, but host credentials, Drive mounts, databases, and other sessions are not exposed.',
   };
 }
 
@@ -146,7 +158,18 @@ async function runAgyMedia(args: ReturnType<typeof parseAgyMediaArgs>, ctx: Call
   try {
     await copyFile(source, stagedPath);
     const mediaPrompt = `${args.prompt}\n\nAnalyze the explicitly selected video at ${stagedPath}. Do not modify files. If it cannot be inspected, say so clearly.`;
-    const cliArgs = ['-p', mediaPrompt, '--output-format', 'json', '--sandbox', '--add-dir', cwd];
+    const groupWorkspace = path.join(GROUPS_DIR, group.folder);
+    const cliArgs = [
+      '-p',
+      mediaPrompt,
+      '--output-format',
+      'json',
+      '--sandbox',
+      '--add-dir',
+      cwd,
+      '--add-dir',
+      groupWorkspace,
+    ];
     if (args.model) cliArgs.push('--model', args.model);
     if (args.effort) cliArgs.push('--effort', args.effort);
     const { stdout } = await execFileAsync(process.env.AGY_BIN || '/home/assistant/.local/bin/agy', cliArgs, {
