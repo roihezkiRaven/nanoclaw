@@ -18,6 +18,7 @@ const AGY_MODELS = new Set([
 ]);
 const EFFORTS = new Set(['low', 'medium', 'high']);
 const MAX_PROMPT_CHARS = 24_000;
+const MAX_MEDIA_PATH_CHARS = 512;
 
 function ok(text: string) {
   return { content: [{ type: 'text' as const, text }] };
@@ -48,11 +49,28 @@ async function runNcl(args: Record<string, unknown>): Promise<string> {
   return stdout;
 }
 
+async function runNclMedia(args: Record<string, unknown>): Promise<string> {
+  const child = Bun.spawn(['/usr/local/bin/ncl', 'agy-media-run', '--stdin-json', '--json'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  child.stdin.write(JSON.stringify(args));
+  child.stdin.end();
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) throw new Error(stderr.trim() || `ncl exited with code ${code}`);
+  return stdout;
+}
+
 export const runAgy: McpToolDefinition = {
   tool: {
     name: 'run_agy',
     description:
-      'Delegate one bounded, read-only research or transformation request to the owner-authenticated Antigravity CLI. The request is sent to Google; NanoClaw files and credentials are not mounted. Use for analysis, summaries, and drafting—not direct system changes.',
+      'Delegate one bounded request to the owner-authenticated Antigravity CLI as a session-scoped sub-agent. It can inspect and edit files in the current /workspace session, but NanoClaw host tools, credentials, Drive mounts, databases, and other sessions are not exposed. Use for research, summaries, drafting, and file transformations; use normal NanoClaw tools for privileged system changes.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -83,4 +101,49 @@ export const runAgy: McpToolDefinition = {
   },
 };
 
-registerTools([runAgy]);
+export const runAgyMedia: McpToolDefinition = {
+  tool: {
+    name: 'run_agy_media',
+    description:
+      'Analyze one explicitly selected video attachment with the owner-authenticated Antigravity CLI. Pass the attachment path from the current message (for example /workspace/inbox/<message-id>/<filename>). Only .mp4, .mov, .webm, and .avi files up to 256 MB are accepted; no Drive files or credentials are mounted.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'One selected video under /workspace/inbox/.' },
+        prompt: { type: 'string', description: `Task prompt (maximum ${MAX_PROMPT_CHARS} characters).` },
+        model: { type: 'string', description: 'Optional model, e.g. gemini-3.7-flash-medium.' },
+        effort: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Optional reasoning effort.' },
+      },
+      required: ['path', 'prompt'],
+    },
+  },
+  async handler(args) {
+    const mediaPath = typeof args.path === 'string' ? args.path.trim() : '';
+    if (!mediaPath) return err('path is required');
+    if (
+      mediaPath.length > MAX_MEDIA_PATH_CHARS ||
+      !mediaPath.startsWith('/workspace/inbox/') ||
+      mediaPath.includes('..')
+    ) {
+      return err('path must be one selected video under /workspace/inbox/');
+    }
+    const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+    if (!prompt) return err('prompt is required');
+    if (prompt.length > MAX_PROMPT_CHARS) return err(`prompt exceeds ${MAX_PROMPT_CHARS} characters`);
+    const model = typeof args.model === 'string' ? args.model.trim() : undefined;
+    if (model && (!MODEL_RE.test(model) || !AGY_MODELS.has(model)))
+      return err('model is not in the approved Gemini catalog');
+    const effort = typeof args.effort === 'string' ? args.effort.toLowerCase() : undefined;
+    if (effort && !EFFORTS.has(effort)) return err('effort must be low, medium, or high');
+    try {
+      const raw = await runNclMedia({ request_id: generateId(), path: mediaPath, prompt, model, effort });
+      const frame = JSON.parse(raw) as { ok?: boolean; data?: unknown; error?: { message?: string } };
+      if (!frame.ok) return err(frame.error?.message || 'Antigravity media request failed');
+      return ok(JSON.stringify(frame.data));
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
+registerTools([runAgy, runAgyMedia]);
