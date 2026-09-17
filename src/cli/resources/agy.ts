@@ -1,6 +1,6 @@
 /** Bounded host-side bridge for the authenticated Antigravity CLI. */
 import { execFile } from 'node:child_process';
-import { copyFile, lstat, mkdtemp, realpath, rm, stat } from 'node:fs/promises';
+import { copyFile, lstat, mkdtemp, open, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -20,6 +20,21 @@ const EFFORTS = new Set(['low', 'medium', 'high']);
 const MAX_MEDIA_BYTES = 256 * 1024 * 1024;
 const MEDIA_PREFIX = '/workspace/inbox/';
 const MEDIA_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.avi']);
+
+async function hasVideoSignature(filePath: string, extension: string): Promise<boolean> {
+  const handle = await open(filePath, 'r');
+  try {
+    const header = Buffer.alloc(12);
+    const { bytesRead } = await handle.read(header, 0, header.length, 0);
+    if (bytesRead < 12) return false;
+    if (extension === '.webm') return header.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+    if (extension === '.avi')
+      return header.subarray(0, 4).toString() === 'RIFF' && header.subarray(8, 12).toString() === 'AVI ';
+    return header.subarray(4, 8).toString() === 'ftyp';
+  } finally {
+    await handle.close();
+  }
+}
 
 function stringArg(args: Record<string, unknown>, name: string): string | undefined {
   const value = args[name];
@@ -122,6 +137,9 @@ async function runAgyMedia(args: ReturnType<typeof parseAgyMediaArgs>, ctx: Call
   if (realSource !== source) throw new Error('selected video may not be a symlink');
   const sourceStat = await stat(source);
   if (sourceStat.size > MAX_MEDIA_BYTES) throw new Error(`video exceeds ${MAX_MEDIA_BYTES} bytes`);
+  if (!(await hasVideoSignature(source, path.extname(source).toLowerCase()))) {
+    throw new Error('selected file does not have a valid video container signature');
+  }
 
   const cwd = await mkdtemp(`${tmpdir()}/nanoclaw-agy-media-`);
   const stagedPath = path.join(cwd, path.basename(source));
