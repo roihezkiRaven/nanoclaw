@@ -35,6 +35,13 @@ The collector is a user-level systemd service. It connects through the linked Wh
 
 At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each new JSONL batch individually. It partitions every batch by group JID and writes substantive dated learning digests only below `whatsapp/`. WhatsApp is treated as an AI/technology learning stream: digests emphasize tools and models, experiments, techniques, lessons, failure modes, resources, emerging practices, and open questions. It does not convert conversational chatter into work projects, people, owners, deadlines, or tasks. Distinct JIDs with the same display label receive separate stable folders. Timeless remains the work-oriented graph for projects, people, decisions, commitments, and tasks. WhatsApp Brain does not update Timeless projects, topics, tasks, people, or decisions, and does not retain raw chat text, phone numbers, or credentials in the graph. It cannot send WhatsApp messages.
 
+At 05:00 UTC on Sundays, the WhatsApp brain maintainer reads only the daily
+WhatsApp pages and rebuilds the cross-group `whatsapp/brain/` layer. It
+deduplicates recurring signals and records reusable tools, patterns, lessons,
+and open questions with links back to existing WhatsApp pages. This layer is
+not a second Timeless graph and never reads raw chat or writes outside the
+WhatsApp subtree.
+
 ### Drive mirror
 
 At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors only the local `whatsapp/` subtree to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after both maintenance jobs.

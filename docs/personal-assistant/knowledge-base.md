@@ -43,6 +43,12 @@ so distinct groups cannot merge. It never copies raw messages or promotes
 pages into the Timeless `projects/`, `topics/`, `tasks/`, `people/`, or
 `decisions/` directories.
 
+The WhatsApp brain is a second, slower layer under `whatsapp/brain/`. It reads
+only the daily WhatsApp pages, deduplicates repeated signals across groups, and
+maintains durable cross-group pages for tools/models, reusable patterns,
+lessons/gotchas, open questions, and weekly synthesis. It never reads raw
+messages or writes outside the WhatsApp subtree.
+
 Daily validation checks source fingerprints, malformed frontmatter, duplicate
 pages, unresolved backlinks, and stale checkpoints. Drive mirrors export only
 knowledge Markdown and preserve the existing folder layout.

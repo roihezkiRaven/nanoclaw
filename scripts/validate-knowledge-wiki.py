@@ -45,14 +45,15 @@ def validate(root: Path) -> list[str]:
             relative.as_posix() in {"index.md", "log.md", "whatsapp/log.md", "whatsapp/coverage.md"}
             or (len(relative.parts) == 3 and relative.parts[0] == "whatsapp" and relative.name == "index.md")
         )
-        if not is_log_or_root_index:
+        is_whatsapp_brain = len(relative.parts) >= 2 and relative.parts[:2] == ("whatsapp", "brain")
+        if not is_log_or_root_index and not is_whatsapp_brain:
             if meta is None:
                 errors.append(f"{relative}: missing frontmatter")
                 continue
             missing = sorted(REQUIRED - meta.keys())
             if missing:
                 errors.append(f"{relative}: missing frontmatter: {', '.join(missing)}")
-            if relative.parts[0] == "whatsapp":
+            if relative.parts[0] == "whatsapp" and not is_whatsapp_brain:
                 missing_provenance = sorted({"group_label", "group_jid"} - meta.keys())
                 if missing_provenance:
                     errors.append(f"{relative}: missing WhatsApp provenance: {', '.join(missing_provenance)}")
