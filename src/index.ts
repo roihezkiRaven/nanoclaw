@@ -18,6 +18,10 @@ import { startHostModules, stopHostModules } from './host-lifecycle.js';
 import { routeInbound } from './router.js';
 import { log } from './log.js';
 import { enforceUpgradeTripwire } from './upgrade-state.js';
+import { readEnvFile } from './env.js';
+import { isOwner } from './modules/permissions/db/user-roles.js';
+import { formatModelCatalog } from './model-catalog.js';
+import { slackPostMessage } from './channels/slack-lib.js';
 
 // Response registry lives in response-registry.ts to break the
 // circular import cycle: src/index.ts imports src/modules/index.js for side
@@ -26,6 +30,32 @@ import { enforceUpgradeTripwire } from './upgrade-state.js';
 import { getResponseHandlers, type ResponsePayload } from './response-registry.js';
 
 const hostAbortController = new AbortController();
+
+async function handleSlackModelsCommand(
+  adapter: ChannelAdapter,
+  platformId: string,
+  message: InboundMessage,
+): Promise<boolean> {
+  if (message.kind !== 'chat-sdk' || !message.content || typeof message.content !== 'object') return false;
+  const content = message.content as Record<string, unknown>;
+  if (typeof content.text !== 'string' || content.text.trim().toLowerCase() !== '/models') return false;
+  const author = content.author;
+  const userId =
+    author && typeof author === 'object' && typeof (author as Record<string, unknown>).userId === 'string'
+      ? ((author as Record<string, unknown>).userId as string)
+      : null;
+  if (!userId || !(await isOwner(`slack:${userId}`))) return false;
+
+  const suffix =
+    adapter.instance && adapter.instance !== 'slack'
+      ? `_${adapter.instance.slice(6).toUpperCase().replace(/-/g, '_')}`
+      : '';
+  const token = readEnvFile([`SLACK_BOT_TOKEN${suffix}`])[`SLACK_BOT_TOKEN${suffix}`];
+  if (!token) return false;
+  const channel = platformId.replace(/^slack:/, '').split(':')[0];
+  await slackPostMessage(token, channel, formatModelCatalog(null), 'models-command');
+  return true;
+}
 
 async function dispatchResponse(payload: ResponsePayload): Promise<void> {
   for (const handler of getResponseHandlers()) {
@@ -53,7 +83,7 @@ import './cli/commands/index.js';
 import './cli/delivery-action.js';
 import { startCliServer, stopCliServer } from './cli/socket-server.js';
 
-import type { ChannelAdapter, ChannelSetup } from './channels/adapter.js';
+import type { ChannelAdapter, ChannelSetup, InboundMessage } from './channels/adapter.js';
 import {
   initChannelAdapters,
   teardownChannelAdapters,
@@ -89,7 +119,8 @@ async function main(): Promise<void> {
   // 3. Channel adapters
   await initChannelAdapters((adapter: ChannelAdapter): ChannelSetup => {
     return {
-      onInbound(platformId, threadId, message) {
+      async onInbound(platformId, threadId, message) {
+        if (adapter.channelType === 'slack' && (await handleSlackModelsCommand(adapter, platformId, message))) return;
         routeInbound({
           channelType: adapter.channelType,
           // The one host-side stamping seam: adapters stay instance-blind,

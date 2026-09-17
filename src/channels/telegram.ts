@@ -31,6 +31,7 @@ import { createChatSdkBridge, type ReplyContext } from './chat-sdk-bridge.js';
 import { registerChannelAdapter } from './channel-registry.js';
 import type { ChannelAdapter, ChannelDefaults, ChannelSetup, InboundMessage } from './adapter.js';
 import { tryConsume } from './telegram-pairing.js';
+import { formatModelCatalog } from '../model-catalog.js';
 
 /**
  * Dedicated bot identity, non-threaded platform (supportsThreads:false), so
@@ -96,6 +97,7 @@ async function registerTelegramCommands(token: string): Promise<void> {
       body: JSON.stringify({
         commands: [
           { command: 'usage', description: 'Show assistant settings and session status' },
+          { command: 'models', description: 'List available assistant and Antigravity models' },
           { command: 'model', description: 'Set model: /model <name|default>' },
           { command: 'effort', description: 'Set reasoning: /effort <level|default>' },
           { command: 'connect_group', description: 'Connect the bot to a Telegram group' },
@@ -147,7 +149,11 @@ function isStartGroupConnectCommand(text: string, botUsername: string | null): b
   return botUsername !== null && text.trim().toLowerCase() === `/start@${botUsername.toLowerCase()} connect`;
 }
 
-type TelegramControlCommand = { name: 'usage' } | { name: 'model'; value: string } | { name: 'effort'; value: string };
+type TelegramControlCommand =
+  | { name: 'usage' }
+  | { name: 'models' }
+  | { name: 'model'; value: string }
+  | { name: 'effort'; value: string };
 
 const VALID_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 const execFileAsync = promisify(execFile);
@@ -200,12 +206,13 @@ async function getCodexRateLimitLines(agentGroupId: string): Promise<string[]> {
 }
 
 function parseControlCommand(text: string, botUsername: string | null): TelegramControlCommand | null {
-  const match = text.trim().match(/^\/(usage|model|effort)(?:@([A-Za-z0-9_]+))?(?:\s+(.+))?$/i);
+  const match = text.trim().match(/^\/(usage|models|model|effort)(?:@([A-Za-z0-9_]+))?(?:\s+(.+))?$/i);
   if (!match) return null;
   if (match[2] && (!botUsername || match[2].toLowerCase() !== botUsername.toLowerCase())) return null;
   const name = match[1].toLowerCase();
   const value = match[3]?.trim() ?? '';
   if (name === 'usage') return value ? null : { name: 'usage' };
+  if (name === 'models') return value ? null : { name: 'models' };
   if (!value) return null;
   return { name: name as 'model' | 'effort', value };
 }
@@ -255,6 +262,10 @@ async function handleControlCommand(
     await sendTelegramMessage(token, platformId, {
       text: `Codex usage\n${rateLimits}\n\nAssistant settings\nModel: ${config.model ?? 'default'}\nReasoning effort: ${config.effort ?? 'default'}\nSessions: ${active} active / ${sessions.length} total`,
     });
+    return true;
+  }
+  if (command.name === 'models') {
+    await sendTelegramMessage(token, platformId, { text: formatModelCatalog(config.model) });
     return true;
   }
   if (command.name === 'model') {
