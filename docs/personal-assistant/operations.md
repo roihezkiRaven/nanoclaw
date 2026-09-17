@@ -58,3 +58,13 @@ At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages (inc
 - Keep the collector allowlist in protected host configuration, not Git.
 - Use the bounded Drive inventory and the ingestion checkpoints; do not reintroduce raw transcript/media ingestion to save tokens.
 - Verify services without exposing secrets: `systemctl --user status whatsapp-collector.service`, `systemctl --user status knowledge-wiki-sync.timer`, and `ncl tasks get <series-id> --group <group-id>`.
+
+### Conversation memory controls
+
+The Personal Assistant supports `/memory`, `/memory check`, `/memory refresh`,
+and `/memory forget <exact-relative-path>`. These are handled conversationally
+by the assistant: `/memory` shows a concise inventory, `check` reports stale or
+contradictory entries, `refresh` reviews recent conversations, and `forget`
+removes only the exact requested memory file after confirmation. The nightly
+02:00 UTC pass also updates `memory/review.md` with its freshness and conflict
+check. Time-sensitive memory uses `as_of` and optional `review_after` metadata.

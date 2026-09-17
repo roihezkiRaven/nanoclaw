@@ -40,6 +40,10 @@ fields:
 - `resource` - path or URL of the raw source this was distilled from (e.g. a
   call transcript). Reference only paths that exist: save raw material worth
   returning to, before linking it.
+- `as_of` - date on which a changing fact was observed or confirmed.
+- `review_after` - optional date after which the fact should be re-checked.
+- `confidence` - optional `high`, `medium`, or `low` marker for an inferred or
+  externally reported fact.
 
 `type` is always the first frontmatter line. When editing a file, never drop
 frontmatter fields you do not recognize.
@@ -71,6 +75,12 @@ when the fact itself is specific ("the user's name is Bob").
 Think in entities. People, projects, teams, places, decisions: things that
 recur deserve their own concept, with relationships recorded ("Dana
 leads the Atlas project"). Make sure to link relevant concepts.
+
+For time-sensitive facts such as access, account state, schedules, ages, or
+active commitments, include `as_of` and set `review_after` when the fact may
+change. If a new conversation contradicts a stored fact, do not silently pick
+one: record the conflict in `memory/review.md` and ask the owner when the
+difference matters.
 
 ## Where it goes
 

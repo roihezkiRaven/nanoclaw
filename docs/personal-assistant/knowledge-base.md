@@ -55,6 +55,14 @@ decisions-and-risks, stale-or-unresolved, and weekly pages with links back to
 the authoritative project/topic/task/person/decision pages. It never reads or
 promotes WhatsApp material and never replaces the canonical graph.
 
+The Personal Assistant's conversational memory is a separate small OKF bundle
+under its agent group. The session hook loads only `memory/index.md` and the
+memory definition; linked concepts are read on demand. Completed conversations
+are archived separately, and the nightly reflection reviews them without
+copying transcript noise into memory. Changing facts carry `as_of` and optional
+`review_after` metadata, with freshness and contradiction findings recorded in
+`memory/review.md`.
+
 Daily validation checks source fingerprints, malformed frontmatter, duplicate
 pages, unresolved backlinks, and stale checkpoints. Drive mirrors export only
 knowledge Markdown and preserve the existing folder layout.
