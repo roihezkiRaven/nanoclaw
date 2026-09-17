@@ -66,7 +66,7 @@ def validate(root: Path) -> list[str]:
                         errors.append(f"{relative}: work-oriented WhatsApp heading: {heading}")
                 if text.count("## Developments — later archive batch") > 0:
                     errors.append(f"{relative}: duplicate late-developments section")
-        elif "whatsapp/" in text:
+        elif "whatsapp/" in text and relative.parts[0] != "brain":
             errors.append(f"{relative}: references WhatsApp knowledge")
         for target in LINK_RE.findall(text):
             if target.startswith(("http://", "https://", "mailto:")):

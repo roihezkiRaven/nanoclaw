@@ -29,6 +29,12 @@ At 02:30 UTC each day, Timeless Brain inventories the approved Timeless root and
 
 Pages are compact and linked by topic, project, decision, task, or person. Each factual page records Drive provenance and marks inferences. The Brain never changes source Drive files or sends messages.
 
+At 05:30 UTC on Sundays, the Timeless brain maintainer reads all canonical
+Timeless Markdown pages (excluding `whatsapp/`) and rebuilds the isolated
+`brain/` synthesis. It deduplicates cross-page themes, active work, decisions,
+risks, stale items, and unresolved questions, preserving links to authoritative
+pages. It does not read raw Drive notes or write outside the `brain/` subtree.
+
 ### WhatsApp
 
 The collector is a user-level systemd service. It connects through the linked WhatsApp account, accepts only configured group JIDs, ignores outgoing messages and all non-text content, queues records durably, and uploads batches to `WhatsApp Archive`. Failed uploads stay queued for retry. It does not backfill old chat history.
@@ -44,7 +50,7 @@ WhatsApp subtree.
 
 ### Drive mirror
 
-At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors only the local `whatsapp/` subtree to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after both maintenance jobs.
+At 04:15 UTC, `knowledge-wiki-sync.timer` mirrors local Timeless wiki pages (including `brain/`) to `Timeless Knowledge`; at 04:20 UTC, `whatsapp-wiki-sync.timer` mirrors only the local `whatsapp/` subtree to `WhatsApp Knowledge`. Both use the restricted writer credential and update only Drive files they created. They are intentionally after the maintenance jobs.
 
 ## Operating safely
 

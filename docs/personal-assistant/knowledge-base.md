@@ -49,6 +49,12 @@ maintains durable cross-group pages for tools/models, reusable patterns,
 lessons/gotchas, open questions, and weekly synthesis. It never reads raw
 messages or writes outside the WhatsApp subtree.
 
+Timeless now has the analogous `brain/` synthesis layer. It reads only the
+canonical Timeless graph and maintains overview, active-work, themes,
+decisions-and-risks, stale-or-unresolved, and weekly pages with links back to
+the authoritative project/topic/task/person/decision pages. It never reads or
+promotes WhatsApp material and never replaces the canonical graph.
+
 Daily validation checks source fingerprints, malformed frontmatter, duplicate
 pages, unresolved backlinks, and stale checkpoints. Drive mirrors export only
 knowledge Markdown and preserve the existing folder layout.
