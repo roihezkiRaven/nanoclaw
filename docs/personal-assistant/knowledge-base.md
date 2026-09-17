@@ -34,9 +34,14 @@ Timeless graph. Each successful source is checkpointed immediately so a failed
 run resumes without a hard source cap.
 
 WhatsApp processing reads only the allow-listed collector archive, partitions
-every batch by group, produces substantive dated group digests only under
-`whatsapp/`, and never copies raw messages or promotes pages into the Timeless
-`projects/`, `topics/`, `tasks/`, `people/`, or `decisions/` directories.
+every batch by group JID, and produces substantive dated learning digests only
+under `whatsapp/`. The WhatsApp schema captures tools/models, experiments,
+techniques, lessons, failure modes, resources, emerging themes, and open
+questions. It does not infer work projects, people, owners, commitments,
+deadlines, or tasks from group chatter. Duplicate labels receive a JID suffix
+so distinct groups cannot merge. It never copies raw messages or promotes
+pages into the Timeless `projects/`, `topics/`, `tasks/`, `people/`, or
+`decisions/` directories.
 
 Daily validation checks source fingerprints, malformed frontmatter, duplicate
 pages, unresolved backlinks, and stale checkpoints. Drive mirrors export only

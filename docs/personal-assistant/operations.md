@@ -33,7 +33,7 @@ Pages are compact and linked by topic, project, decision, task, or person. Each 
 
 The collector is a user-level systemd service. It connects through the linked WhatsApp account, accepts only configured group JIDs, ignores outgoing messages and all non-text content, queues records durably, and uploads batches to `WhatsApp Archive`. Failed uploads stay queued for retry. It does not backfill old chat history.
 
-At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each new JSONL batch individually. It partitions every batch by group and writes substantive dated digests only below `whatsapp/`. It does not update Timeless projects, topics, tasks, people, or decisions, and does not retain raw chat text, phone numbers, or credentials in the graph. It cannot send WhatsApp messages.
+At 03:30 UTC each day, WhatsApp Brain lists only that archive and processes each new JSONL batch individually. It partitions every batch by group JID and writes substantive dated learning digests only below `whatsapp/`. WhatsApp is treated as an AI/technology learning stream: digests emphasize tools and models, experiments, techniques, lessons, failure modes, resources, emerging practices, and open questions. It does not convert conversational chatter into work projects, people, owners, deadlines, or tasks. Distinct JIDs with the same display label receive separate stable folders. Timeless remains the work-oriented graph for projects, people, decisions, commitments, and tasks. WhatsApp Brain does not update Timeless projects, topics, tasks, people, or decisions, and does not retain raw chat text, phone numbers, or credentials in the graph. It cannot send WhatsApp messages.
 
 ### Drive mirror
 

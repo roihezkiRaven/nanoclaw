@@ -1,6 +1,6 @@
 ---
 name: whatsapp-wiki-maintainer
-description: Maintain concise WhatsApp group digests and durable knowledge from the allow-listed collector archive.
+description: Maintain AI and technology learning digests from the allow-listed WhatsApp archive.
 ---
 
 # WhatsApp wiki maintainer
@@ -15,21 +15,32 @@ Use the Google Drive skill's `tree` operation with `max_depth: 0` and a limit la
 For each source, first parse every JSONL record and partition the records by
 `groupJid`. You must handle every distinct group represented in the source;
 never summarize only the first or most active group. Resolve the group label
-from the records and use a stable slug derived from that label. For each group,
-extract useful group-level information: context, decisions, commitments,
-deadlines, blockers, project updates, technical details, and recurring themes.
+from the records and use a stable slug derived from that label. If distinct
+groupJIDs share a label, append a short stable JID suffix to each slug so they
+cannot merge. For each group,
+extract useful group-level information: tools and models, experiments, practical
+techniques, implementation patterns, evidence, lessons, failure modes, useful
+resources, emerging themes, and open questions. Treat these groups as an AI and
+technology learning stream. A shared link, announcement, or opinion is not
+durable knowledge without a concrete technical takeaway. Distinguish reported
+claims, observed evidence, and inference, and preserve uncertainty. Do not turn
+casual discussion into work projects, owners, commitments, deadlines, or tasks
+unless the messages explicitly state them.
 Do not copy raw messages. Write or update one substantive dated digest in
 `whatsapp/<group-slug>/YYYY-MM-DD.md` for each represented group, even when the
-result is a short `No durable items` note. When the source contains enough
-material, preserve nuance with these sections: Summary, Developments, Decisions,
-Actions and deadlines, Blockers or open questions, and Technical/context notes.
+result is a short `No durable items` note. Rewrite one canonical dated digest;
+do not append duplicate "late developments" sections. When the source contains
+enough material, preserve nuance with these sections: Summary, Tools and models,
+Experiments and techniques, Lessons and gotchas, Resources, Emerging themes,
+Open questions, and Explicit actions only when stated.
 Each digest must list all contributing source IDs in `sources` frontmatter and
 the exact group label/JID in its provenance section. Do not merge records from
 different groups or infer a fact from another group.
 
 This brain is strictly isolated from Timeless knowledge. It may create or update
-only files below `whatsapp/` plus the WhatsApp ingestion checkpoint and the
-operational `log.md`. Never create, edit, backlink to, or delete anything under
+only files below `whatsapp/` plus the WhatsApp ingestion checkpoint, a
+WhatsApp-only `coverage.md`, and the operational `log.md`. Never create, edit,
+backlink to, or delete anything under
 `projects/`, `topics/`, `tasks/`, `people/`, `decisions/`, or the Timeless root
 index. If a WhatsApp fact deserves durable treatment, retain it in the group's
 digest rather than promoting it into the Timeless graph.

@@ -12,6 +12,13 @@ from pathlib import Path
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)")
 REQUIRED = {"type", "title", "description", "tags", "generated", "sources"}
 WHATSAPP_FORBIDDEN_LINKS = ("../projects/", "../topics/", "../tasks/", "../people/", "../decisions/")
+WHATSAPP_WORK_HEADINGS = (
+    "## Developments",
+    "## Decisions",
+    "## Actions and deadlines",
+    "## Blockers or open questions",
+    "## Technical/context notes",
+)
 
 
 def frontmatter(text: str) -> dict[str, str] | None:
@@ -34,7 +41,10 @@ def validate(root: Path) -> list[str]:
         text = path.read_text(encoding="utf-8")
         meta = frontmatter(text)
         relative = path.relative_to(root)
-        is_log_or_root_index = relative.as_posix() in {"index.md", "log.md", "whatsapp/log.md"}
+        is_log_or_root_index = (
+            relative.as_posix() in {"index.md", "log.md", "whatsapp/log.md", "whatsapp/coverage.md"}
+            or (len(relative.parts) == 3 and relative.parts[0] == "whatsapp" and relative.name == "index.md")
+        )
         if not is_log_or_root_index:
             if meta is None:
                 errors.append(f"{relative}: missing frontmatter")
@@ -49,6 +59,12 @@ def validate(root: Path) -> list[str]:
         if relative.parts[0] == "whatsapp":
             if any(link in text for link in WHATSAPP_FORBIDDEN_LINKS):
                 errors.append(f"{relative}: links into Timeless graph")
+            if relative.name not in {"index.md", "log.md"}:
+                for heading in WHATSAPP_WORK_HEADINGS:
+                    if heading in text:
+                        errors.append(f"{relative}: work-oriented WhatsApp heading: {heading}")
+                if text.count("## Developments — later archive batch") > 0:
+                    errors.append(f"{relative}: duplicate late-developments section")
         elif "whatsapp/" in text:
             errors.append(f"{relative}: references WhatsApp knowledge")
         for target in LINK_RE.findall(text):
