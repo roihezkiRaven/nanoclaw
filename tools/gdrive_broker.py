@@ -13,7 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import gdrive_assistant as drive
 
 MAX_BYTES = 1_000_000
-MAX_TREE_ITEMS = 200
+MAX_TREE_ITEMS = 5000
 
 
 def writer_parent(api, requested_parent):
