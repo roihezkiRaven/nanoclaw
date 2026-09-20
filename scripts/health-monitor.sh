@@ -22,6 +22,8 @@ fi
 curl --noproxy '*' --connect-timeout 3 --max-time 5 -fsS -o /dev/null \
   -X POST http://172.17.0.1:8765/ -H 'content-type: application/json' \
   --data '{"action":"calendar","limit":1}' || issues+=(gdrive-api)
+python3 "$root/scripts/validate-knowledge-wiki.py" "$root/data/timeless-wiki" >/dev/null \
+  || issues+=(knowledge-wiki)
 disk_used=$(df -P / | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
 if [[ "${disk_used:-100}" -ge 85 ]]; then
   issues+=(disk-"$disk_used"-percent)
