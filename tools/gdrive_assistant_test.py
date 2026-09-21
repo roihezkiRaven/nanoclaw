@@ -17,6 +17,7 @@ class OAuthRecoveryTest(unittest.TestCase):
             revoked = MagicMock(expired=True, refresh_token="present")
             revoked.refresh.side_effect = RefreshError("invalid_grant")
             authorized = MagicMock(valid=True)
+            authorized.to_json.return_value = "{}"
             flow = MagicMock()
             flow.run_local_server.return_value = authorized
 
