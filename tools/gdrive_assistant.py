@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -46,7 +47,12 @@ def service(mode: str, authorize: bool):
     token_path = TOKENS[mode]
     creds = Credentials.from_authorized_user_file(token_path, SCOPES[mode]) if token_path.exists() else None
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            if not authorize:
+                raise
+            creds = None
     if not creds or not creds.valid:
         if not authorize:
             raise RuntimeError(f"{mode} authorization is required; run auth first")
