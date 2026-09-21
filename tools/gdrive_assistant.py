@@ -67,6 +67,12 @@ def auth(mode: str) -> None:
     print(json.dumps({"ok": True, "mode": mode, "scope": SCOPES[mode][0]}))
 
 
+def check(mode: str) -> None:
+    """Refresh and validate one configured OAuth credential without writing data."""
+    service(mode, authorize=False)
+    print(json.dumps({"ok": True, "mode": mode, "scope": SCOPES[mode][0]}))
+
+
 def search(query: str, limit: int) -> None:
     drive = service("reader", authorize=False)
     escaped = query.replace("'", "\\'")
@@ -182,7 +188,7 @@ def calendar_events(start: str | None, end: str | None, limit: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("reader", "writer", "calendar"))
-    parser.add_argument("action", choices=("auth", "search", "list", "read", "write", "mkdir", "events"))
+    parser.add_argument("action", choices=("auth", "check", "search", "list", "read", "write", "mkdir", "events"))
     parser.add_argument("--query")
     parser.add_argument("--file-id")
     parser.add_argument("--limit", type=int, default=10)
@@ -195,6 +201,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.action == "auth":
         auth(args.mode)
+    elif args.action == "check":
+        check(args.mode)
     elif args.action == "search":
         if args.mode != "reader" or not args.query:
             parser.error("reader search requires --query")

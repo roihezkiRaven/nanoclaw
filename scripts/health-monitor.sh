@@ -19,9 +19,12 @@ systemctl --user is-active --quiet gdrive-broker.service || issues+=(gdrive-brok
 if ! systemctl --user is-active --quiet whatsapp-collector.service || ! find "$root/store/whatsapp-collector/heartbeat" -mmin -3 -print -quit 2>/dev/null | grep -q .; then
   issues+=(whatsapp-collector)
 fi
-curl --noproxy '*' --connect-timeout 3 --max-time 5 -fsS -o /dev/null \
-  -X POST http://172.17.0.1:8765/ -H 'content-type: application/json' \
-  --data '{"action":"calendar","limit":1}' || issues+=(gdrive-api)
+"$root/.venv-gdrive/bin/python" "$root/tools/gdrive_assistant.py" reader check >/dev/null \
+  || issues+=(drive-reader)
+"$root/.venv-gdrive/bin/python" "$root/tools/gdrive_assistant.py" writer check >/dev/null \
+  || issues+=(drive-writer)
+"$root/.venv-gdrive/bin/python" "$root/tools/gdrive_assistant.py" calendar check >/dev/null \
+  || issues+=(google-calendar)
 python3 "$root/scripts/validate-knowledge-wiki.py" "$root/data/timeless-wiki" >/dev/null \
   || issues+=(knowledge-wiki)
 disk_used=$(df -P / | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
@@ -43,7 +46,7 @@ printf '%s' "$summary" >"$state_file"
 if [[ ",$summary," == *,nanoclaw,* ]]; then
   systemctl --user restart nanoclaw-v2-fc17183a.service || true
 fi
-if [[ ",$summary," == *,gdrive-broker,* || ",$summary," == *,gdrive-api,* ]]; then
+if [[ ",$summary," == *,gdrive-broker,* || ",$summary," == *,drive-reader,* || ",$summary," == *,drive-writer,* || ",$summary," == *,google-calendar,* ]]; then
   systemctl --user restart gdrive-broker.service || true
 fi
 if [[ ",$summary," == *,whatsapp-collector,* ]]; then
