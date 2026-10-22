@@ -497,6 +497,10 @@ async function testPreContractProviders(): Promise<void> {
       let source = readFileSync(barrel, 'utf8');
       for (const provider of ['codex', 'opencode']) {
         rmSync(join(root, directory, `${provider}.ts`), { force: true });
+        const implementations = directory.replace('provider-contracts', 'providers');
+        for (const suffix of ['.conformance.test.ts', '-contract-parity.test.ts']) {
+          rmSync(join(root, implementations, `${provider}${suffix}`), { force: true });
+        }
         source = source.replace(new RegExp(`^import ['"]\\./${provider}\\.js['"];?\\r?\\n`, 'gm'), '');
       }
       writeFileSync(barrel, source);
