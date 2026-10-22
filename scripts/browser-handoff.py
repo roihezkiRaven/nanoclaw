@@ -3,6 +3,7 @@
 import datetime as dt
 import json
 import os
+from pathlib import Path
 import re
 import socketserver
 import subprocess
@@ -51,6 +52,12 @@ class Bridge(socketserver.ThreadingTCPServer):
 
 
 def main():
+    global HOST
+    if not HOST:
+        settings = Path(__file__).resolve().parents[1] / "config/browser-handoff.json"
+        HOST = json.loads(settings.read_text())["ssh_host"]
+    if not isinstance(HOST, str) or not re.fullmatch(r"[A-Za-z0-9_.@:-]+", HOST) or HOST.startswith("-"):
+        raise ValueError("Invalid browser handoff SSH host")
     state = json.loads(remote(READ_STATE))
     if state.get("provider") not in ("tavily", "gemini") or state.get("status") != "waiting_human":
         raise ValueError("Ask the agent in Telegram to prepare the approved provider handoff first.")

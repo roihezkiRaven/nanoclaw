@@ -23,7 +23,7 @@ weekly rebuilds. Source reads and upload IDs persist after each successful step;
 corrupt sync state fails closed. Private runtime state requires protected backup;
 Git is a backup of code and configuration templates, not owner data.
 
-For a browser handoff, set `NANOCLAW_SSH_HOST` to the configured SSH destination;
+For a browser handoff, set `NANOCLAW_SSH_HOST` (or ignored `config/browser-handoff.json`, using the example in `config-examples/`) to the configured SSH destination;
 the public helper contains no installation address.
 
 ## Models and roles
