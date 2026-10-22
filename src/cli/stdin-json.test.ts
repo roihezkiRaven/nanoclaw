@@ -100,7 +100,7 @@ describe('host CLI flags', () => {
   it('reports malformed stdin as an input error, not an unexpected failure', () => {
     const result = spawnSync(
       process.execPath,
-      ['--import', 'tsx', 'src/cli/client.ts', 'groups', 'list', '--stdin-json'],
+      ['--no-warnings', '--import', 'tsx', 'src/cli/client.ts', 'groups', 'list', '--stdin-json'],
       {
         cwd: process.cwd(),
         encoding: 'utf8',

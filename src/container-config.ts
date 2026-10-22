@@ -377,7 +377,8 @@ export function configFromDb(row: ContainerConfigRow, group: AgentGroup): Contai
     maxMessagesPerPrompt: row.max_messages_per_prompt ?? undefined,
     // The group's own model wins; NANOCLAW_DEFAULT_MODEL fills in for groups
     // that have none. Both absent leaves the field out and the SDK decides.
-    model: row.model ?? (DEFAULT_MODEL || undefined),
+    model:
+      row.model ?? (DEFAULT_MODEL || ((row.provider ?? group.agent_provider) === 'codex' ? 'gpt-6-luna' : undefined)),
     effort: row.effort ?? undefined,
     // A cleared group value falls back to the install-wide default.
     ...speedFields(parseContainerSpeed(row.speed) ?? (FAST_MODE ? 'fast' : undefined)),

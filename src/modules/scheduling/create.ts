@@ -23,6 +23,7 @@ const RECURRENCE_LIMIT_WARNING =
   'this situation, you can override this with --dangerously-override-recurrence-limit';
 
 export interface PreparedScheduledTask {
+  timezone?: string;
   name?: string;
   prompt: string;
   recurrence: string | null;
@@ -108,6 +109,7 @@ export function prepareScheduledTask(input: {
   script?: string | null;
   dangerouslyOverrideRecurrenceLimit?: boolean;
   timezone?: string;
+  taskTimezone?: string;
 }): PreparedScheduledTask {
   if (!input.prompt) throw new Error('--prompt is required');
   const recurrence = input.recurrence ?? null;
@@ -125,7 +127,14 @@ export function prepareScheduledTask(input: {
     processAfter = parseProcessAfter(input.processAfter, tz);
   }
 
-  return { name: input.name, prompt: input.prompt, recurrence, script, processAfter };
+  return {
+    name: input.name,
+    prompt: input.prompt,
+    recurrence,
+    script,
+    processAfter,
+    ...(input.taskTimezone ? { timezone: input.taskTimezone } : {}),
+  };
 }
 
 /** Persist a prepared task through NanoClaw's single task/session representation. */
@@ -145,6 +154,7 @@ export async function createScheduledTask(
       recurrence: task.recurrence,
       content: JSON.stringify({
         prompt: task.prompt,
+        ...(task.timezone ? { timezone: task.timezone } : {}),
         script: task.script,
         originSessionId: options?.originSessionId ?? null,
       }),

@@ -1,41 +1,9 @@
-# Gemini subscription boundary
+# Gemini and Antigravity workers
 
-Google AI Pro/Ultra provides higher Gemini CLI quotas when you sign in with the
-subscribed Google account. Gemini CLI also has headless output and usage stats,
-but that does not make its OAuth session an approved backend credential for a
-third-party agent.
+The owner-authorized `run_agy` worker invokes the authenticated Antigravity CLI for bounded tasks. The current session and Personal Assistant workspace are available for ordinary file work. Google Drive credentials and unrelated sessions are not passed to the worker.
 
-Google’s Gemini CLI FAQ explicitly warns that third-party software must not
-harvest or piggyback on Gemini CLI OAuth authentication. Therefore NanoClaw does
-not store, mount, refresh, proxy, or invoke the subscription OAuth session from
-agent turns, cron jobs, ADK workers, or wrappers.
+`run_agy_media` handles one explicitly owner-selected attachment or Drive recording. Drive credentials remain on the host; only the downloaded media enters a private temporary workspace. The host validates the source, bounds size, preprocesses larger recordings for AGY's media reader and removes temporary files after completion. Video/audio limitations and compression must be reported; a transcript or notes summary is not a video-analysis result.
 
-## What the subscription provides
+Gemini 4 Argon IDs are allowed locally, but availability depends on the authenticated account's AGY catalog. Use an available explicit model unless the owner requires Argon. A separate API/Vertex identity remains independent of Drive OAuth and the AGY worker.
 
-The published Gemini CLI limits currently list 1,500 requests/day for Google AI
-Pro and 2,000 requests/day for Google AI Ultra. Agent mode and Gemini CLI usage
-share the same per-user quota, so adding NanoClaw as another OAuth client would
-not create extra quota and would make usage accounting less predictable.
-
-## Supported use
-
-Use Gemini CLI interactively on a trusted workstation, authenticate with the
-subscription account, and inspect usage with `/stats model`. For a one-off batch,
-the supported CLI also has headless mode (for example, `gemini -p "..."
---output-format json --stats`). Copy the resulting report into NanoClaw as an
-ordinary file if the assistant should summarize it. This keeps the subscription
-inside Google’s intended CLI surface and supports its multimodal features
-without giving the daemon the OAuth session.
-
-## Automation boundary
-
-Automated NanoClaw multimodal work is disabled until the owner explicitly
-provides a separate compliant Gemini API authorization key or Vertex AI
-identity. That future provider must have independent quota/billing limits,
-source-policy checks, usage logging, and a fail-closed credential path. It must
-not reuse Drive OAuth credentials or Gemini CLI tokens.
-
-References: [Gemini CLI quotas](https://geminicli.com/docs/resources/quota-and-pricing/),
-[headless mode](https://geminicli.com/docs/cli/headless/),
-[Google Cloud agent-mode quotas](https://docs.cloud.google.com/gemini/docs/quotas#quotas-for-agent-mode-gemini-cli),
-and [Gemini CLI FAQ](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/faq.md).
+See [operations](operations.md#drive-video-and-telegram-capability-development) for limits, testing and the Telegram capability patch workflow.

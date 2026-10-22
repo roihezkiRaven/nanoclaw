@@ -11,7 +11,6 @@ from pathlib import Path
 
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)")
 REQUIRED = {"type", "title", "description", "tags", "generated", "sources"}
-WHATSAPP_FORBIDDEN_LINKS = ("../projects/", "../topics/", "../tasks/", "../people/", "../decisions/")
 WHATSAPP_WORK_HEADINGS = (
     "## Developments",
     "## Decisions",
@@ -29,7 +28,7 @@ def frontmatter(text: str) -> dict[str, str] | None:
         return {}
     result: dict[str, str] = {}
     for line in text[4:end].splitlines():
-        if ":" in line:
+        if re.match(r"^[a-zA-Z_]+:", line):
             key, value = line.split(":", 1)
             result[key.strip()] = value.strip()
     return result
@@ -46,7 +45,7 @@ def validate(root: Path) -> list[str]:
             or (len(relative.parts) == 3 and relative.parts[0] == "whatsapp" and relative.name == "index.md")
         )
         is_whatsapp_brain = len(relative.parts) >= 2 and relative.parts[:2] == ("whatsapp", "brain")
-        if not is_log_or_root_index and not is_whatsapp_brain:
+        if not is_log_or_root_index:
             if meta is None:
                 errors.append(f"{relative}: missing frontmatter")
                 continue
@@ -57,27 +56,43 @@ def validate(root: Path) -> list[str]:
                 missing_provenance = sorted({"group_label", "group_jid"} - meta.keys())
                 if missing_provenance:
                     errors.append(f"{relative}: missing WhatsApp provenance: {', '.join(missing_provenance)}")
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.md", relative.name) and meta.get("type") != "coverage-status":
+                    jid = meta.get("group_jid", "").strip("\"'")
+                    if not re.fullmatch(r"\d+(?:-\d+)?@g\.us", jid):
+                        errors.append(f"{relative}: daily digest requires an exact group JID")
+                    if meta.get("sources", "").strip() == "[]":
+                        errors.append(f"{relative}: daily digest has no source provenance; use coverage-status for no-record checks")
         if relative.parts[0] == "whatsapp":
-            if any(link in text for link in WHATSAPP_FORBIDDEN_LINKS):
-                errors.append(f"{relative}: links into Timeless graph")
+            if re.search(r"(?m)^[-*] \[\d{4}-\d{2}-\d{2}T", text):
+                errors.append(f"{relative}: copied timestamped chat messages instead of a digest")
+            if re.search(r"\bsender_jid\s*:", text):
+                errors.append(f"{relative}: exposes a sender identifier")
             if relative.name not in {"index.md", "log.md"}:
                 for heading in WHATSAPP_WORK_HEADINGS:
                     if heading in text:
                         errors.append(f"{relative}: work-oriented WhatsApp heading: {heading}")
                 if text.count("## Developments — later archive batch") > 0:
                     errors.append(f"{relative}: duplicate late-developments section")
-        elif "whatsapp/" in text and relative.parts[0] != "brain":
-            errors.append(f"{relative}: references WhatsApp knowledge")
         for target in LINK_RE.findall(text):
             if target.startswith(("http://", "https://", "mailto:")):
                 continue
             resolved = (path.parent / target).resolve()
-            if not resolved.exists():
+            if not resolved.is_relative_to(root.resolve()):
+                errors.append(f"{relative}: link escapes knowledge wiki: {target}")
+            elif (relative.parts[0] == "whatsapp") != (resolved.relative_to(root.resolve()).parts[:1] == ("whatsapp",)):
+                errors.append(f"{relative}: link crosses knowledge isolation boundary: {target}")
+            elif not resolved.exists():
                 errors.append(f"{relative}: broken link: {target}")
-    for checkpoint in root.glob("*ingestion.json"):
+    for checkpoint in root.rglob("*ingestion*.json"):
         try:
-            json.loads(checkpoint.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            data = json.loads(checkpoint.read_text(encoding="utf-8"))
+            entries = data.get("files", data.get("sources")) if isinstance(data, dict) else None
+            if not isinstance(entries, dict) or any(
+                not isinstance(item, dict) or not isinstance(item.get("modifiedTime", item.get("modified")), str)
+                for item in entries.values()
+            ):
+                raise ValueError("expected a source map with observed modification times")
+        except (OSError, ValueError) as exc:
             errors.append(f"{checkpoint.relative_to(root)}: invalid checkpoint: {exc}")
     return errors
 

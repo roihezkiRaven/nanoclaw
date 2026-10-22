@@ -943,10 +943,21 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           const attachFiles = i === 0 && fileUploads && fileUploads.length > 0;
-          const result = await adapter.postMessage(
-            tid,
-            attachFiles ? { markdown: chunk, files: fileUploads } : { markdown: chunk },
-          );
+          let result;
+          try {
+            result = await adapter.postMessage(
+              tid,
+              attachFiles ? { markdown: chunk, files: fileUploads } : { markdown: chunk },
+            );
+          } catch (error) {
+            if (
+              adapter.name !== 'telegram' ||
+              !(error instanceof Error) ||
+              !/can't parse entities/i.test(error.message)
+            )
+              throw error;
+            result = await adapter.postMessage(tid, attachFiles ? { raw: chunk, files: fileUploads } : { raw: chunk });
+          }
           if (i === 0) firstId = result?.id;
         }
         return firstId;

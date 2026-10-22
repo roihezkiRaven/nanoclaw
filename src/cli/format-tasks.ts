@@ -10,6 +10,7 @@
 interface TaskListRow {
   series_id: string;
   schedule?: string | null;
+  timezone?: string | null;
   runs?: number;
   failed_runs?: number;
   last_run?: string | null;
@@ -65,7 +66,7 @@ export function formatTasksTable(rows: TaskListRow[], now: number = Date.now()):
   if (!rows.length) return 'No tasks.';
   const body = rows.map((r) => [
     r.series_id, // full id, copy-pasteable into `ncl tasks get --id <…>`
-    r.schedule || 'once',
+    `${r.schedule || 'once'}${r.timezone ? ` [${r.timezone}]` : ''}`,
     String(r.runs ?? 0),
     String(r.failed_runs ?? 0),
     lastRun(r.last_run, now),

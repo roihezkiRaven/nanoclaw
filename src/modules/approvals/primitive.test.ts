@@ -111,7 +111,7 @@ function lastNotifyText(): string | undefined {
 }
 
 describe('requestApproval delivery failure', () => {
-  it('removes the pending approval row and notifies the agent when delivery throws', async () => {
+  it('retains failed delivery evidence for retry and notifies the agent when delivery throws', async () => {
     const failingAdapter: ChannelDeliveryAdapter = {
       async deliver() {
         throw new Error('platform down');
@@ -128,8 +128,10 @@ describe('requestApproval delivery failure', () => {
       question: 'Approve the thing?',
     });
 
-    // No orphan: the row created before the delivery attempt is gone.
-    expect(await getPendingApprovalsByAction('test_action')).toHaveLength(0);
+    const rows = await getPendingApprovalsByAction('test_action');
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0].payload).delivery.status).toBe('failed');
+    expect(rows[0].platform_message_id).toBeNull();
     expect(lastNotifyText()).toMatch(/test_action failed: could not deliver/);
   });
 

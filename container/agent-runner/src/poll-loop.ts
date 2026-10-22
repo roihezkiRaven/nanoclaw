@@ -3,6 +3,8 @@ import {
   getPendingMessages,
   markProcessing,
   markCompleted,
+  markFailed,
+  getMessageIn,
   markScriptSkipped,
   type MessageInRow,
 } from './db/messages-in.js';
@@ -298,20 +300,12 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
         thread_id: routing.threadId,
         content: JSON.stringify({ text: `Error: ${errMsg}` }),
       });
-
-      // The batch is still acked completed below (no redelivery). Without
-      // this line the only log trace of the errored turn is "Query error"
-      // followed by a "Completed" line that reads like success.
-      log(`Errored batch will be acked completed — ${processingIds.length} message(s), no redelivery`);
     } finally {
       clearCurrentReplyRoute();
       config.signal?.removeEventListener('abort', abortActiveQuery);
     }
 
-    // Ensure completed even if processQuery ended without a result event
-    // (e.g. stream closed unexpectedly).
-    markCompleted(processingIds);
-    log(`Completed ${ids.length} message(s)`);
+    log(`Processed ${ids.length} message(s)`);
   }
 }
 
@@ -357,6 +351,13 @@ interface QueryResult {
   continuation?: string;
 }
 
+function finishProviderMessages(ids: string[], failed: boolean): void {
+  for (const id of ids) {
+    if (failed && getMessageIn(id)?.kind === 'task') markFailed(id);
+    else markCompleted([id]);
+  }
+}
+
 export async function processQuery(
   query: AgentQuery,
   routing: RoutingContext,
@@ -381,6 +382,7 @@ export async function processQuery(
   routing = { ...routing };
   let queryContinuation: string | undefined;
   let done = false;
+  let turnIds = [...initialBatchIds];
   let unwrappedNudged = false;
   // Once-per-turn guard for the task-run "<message> block was not delivered"
   // nudge — mirrors unwrappedNudged for chat turns.
@@ -429,12 +431,14 @@ export async function processQuery(
   let answering = initialPrompt !== '';
   type QueuedTurn = {
     routing: RoutingContext;
+    ids: string[];
     unwrappedNudged: boolean;
     taskBlockNudged: boolean;
   };
   const queuedTurns: QueuedTurn[] = [];
   const adoptTurn = (next: QueuedTurn): void => {
     Object.assign(routing, next.routing);
+    turnIds = next.ids;
     unwrappedNudged = next.unwrappedNudged;
     taskBlockNudged = next.taskBlockNudged;
     publishReplyRoute(routing);
@@ -444,7 +448,7 @@ export async function processQuery(
   // Preserve its original route, prompt and retry guards until it is answered.
   const pushRetry = (prompt: string): void => {
     query.push(prompt);
-    queuedTurns.push({ routing: { ...routing }, unwrappedNudged, taskBlockNudged });
+    queuedTurns.push({ routing: { ...routing }, ids: [], unwrappedNudged, taskBlockNudged });
     archivePrompts.push(archivePrompts[0] ?? initialPrompt);
   };
 
@@ -538,12 +542,12 @@ export async function processQuery(
         archivePrompts.push(prompt);
         const next: QueuedTurn = {
           routing: extractRouting(keep),
+          ids: keptIds,
           unwrappedNudged: false,
           taskBlockNudged: false,
         };
         if (answering) queuedTurns.push(next);
         else adoptTurn(next);
-        markCompleted(keptIds);
       } catch (err) {
         // Without this catch the rejection escapes the void IIFE and Node
         // terminates the container on unhandled-rejection. The initial-batch
@@ -610,7 +614,6 @@ export async function processQuery(
         // follow-up pushes. The agent may have responded via MCP
         // (send_message) mid-turn, or the message may not need a response
         // at all — either way the turn is finished.
-        markCompleted(initialBatchIds);
         if (event.text) {
           const { sent, hasUnwrapped, taskBlocks, resultBlocks } = await dispatchResultText(event.text, routing, {
             midTurnSent,
@@ -618,7 +621,9 @@ export async function processQuery(
             // content (error results excepted, below): mid-turn streaming is
             // the single content door. The result door's remaining job is
             // the nudge decision — see turnDelivered.
-            suppressDelivery: midTurnCompleteDelivery,
+            suppressDelivery:
+              midTurnCompleteDelivery &&
+              (event.isError !== true || midTurnSent > 0 || chatRowWrittenSince(turnStartSeq)),
             // "Did anything user-visible go out this turn?" — door
             // deliveries (midTurnSent) plus any chat row written since the
             // turn boundary (which also sees MCP send_message calls the
@@ -634,12 +639,12 @@ export async function processQuery(
           // A corrective retry handles delivery only; its result is not a
           // second run summary.
           if (routing.taskRun && !taskBlockNudged) await autoAppendTaskLog(event.text);
-          if (resultBlocks === 0 && event.isError === true && !routing.taskRun) {
+          if (event.isError === true) {
             // Non-retryable error turn (e.g. a 403 billing_error) with no
             // <message> envelope: deliver the notice instead of dropping it as
             // scratchpad, and skip the re-wrap nudge — it would just re-hammer
             // the failing gateway turn after turn.
-            await deliverErrorResult(event.text, routing);
+            if (!routing.taskRun && resultBlocks === 0) await deliverErrorResult(event.text, routing);
             notifyExchangeComplete(onExchangeComplete, {
               prompt: archivePrompts[0] ?? initialPrompt,
               result: event.text,
@@ -684,6 +689,8 @@ export async function processQuery(
             archivePrompts.shift();
           }
         } else archivePrompts.shift();
+        finishProviderMessages(turnIds, event.isError === true);
+        turnIds = [];
         // Turn boundary: reset the per-turn sent count after the result's
         // nudge decision has used it. A nudge retry re-counts via its own
         // text events before the retry result, so resetting on every result
@@ -713,6 +720,8 @@ export async function processQuery(
   } finally {
     done = true;
     clearInterval(pollHandle);
+    finishProviderMessages(turnIds, true);
+    for (const next of queuedTurns) finishProviderMessages(next.ids, true);
   }
 
   return { continuation: queryContinuation };

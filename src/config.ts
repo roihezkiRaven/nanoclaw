@@ -43,10 +43,9 @@ export const DEFAULT_AGENT_PROVIDER = (
 ).toLowerCase();
 
 // Instance-wide default model for agent containers, applied when the group has
-// no model of its own. Unset means the provider SDK's own default, which is
-// what every existing install gets. Unlike DEFAULT_AGENT_PROVIDER this is read
-// at spawn rather than stamped at creation, so changing it takes effect on the
-// next container start for every group that has not set one.
+// no model of its own. Unlike DEFAULT_AGENT_PROVIDER this is read at spawn, so
+// changing it takes effect on the next container start for every group that has
+// not set one.
 export const DEFAULT_MODEL = process.env.NANOCLAW_DEFAULT_MODEL || envConfig.NANOCLAW_DEFAULT_MODEL || '';
 
 // Fast serving tier for every agent container: faster output at a higher

@@ -12,6 +12,7 @@ import '../modules/index.js';
 import { getAgentMailbox, readMailboxContext } from '../mailbox/index.js';
 import type { AgentMailbox } from '../mailbox/types.js';
 
+import { commandTimeoutMs } from './timeouts.js';
 import { readStdinJsonArgs, StdinJsonInputError } from './stdin-json.js';
 
 // ---------------------------------------------------------------------------
@@ -59,7 +60,11 @@ async function writeRequest(mailbox: AgentMailbox, req: RequestFrame): Promise<v
 /**
  * Poll the mailbox for a cli_response matching our requestId.
  */
-async function pollResponse(mailbox: AgentMailbox, requestId: string, timeoutMs: number): Promise<ResponseFrame | null> {
+async function pollResponse(
+  mailbox: AgentMailbox,
+  requestId: string,
+  timeoutMs: number,
+): Promise<ResponseFrame | null> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -211,9 +216,7 @@ function formatHuman(resp: ResponseFrame): string {
   const header = keys.map((k, i) => k.padEnd(widths[i])).join('  ');
   const sep = widths.map((w) => '-'.repeat(w)).join('  ');
   const rows = data.map((r) =>
-    keys
-      .map((k, i) => String((r as Record<string, unknown>)[k] ?? '').padEnd(widths[i]))
-      .join('  '),
+    keys.map((k, i) => String((r as Record<string, unknown>)[k] ?? '').padEnd(widths[i])).join('  '),
   );
 
   return [header, sep, ...rows, ''].join('\n');
@@ -255,10 +258,11 @@ async function main(): Promise<void> {
   try {
     const requestId = generateId();
     await writeRequest(mailbox, { id: requestId, command, args: requestArgs });
-    const resp = await pollResponse(mailbox, requestId, 30_000);
+    const timeoutMs = commandTimeoutMs(command);
+    const resp = await pollResponse(mailbox, requestId, timeoutMs);
 
     if (!resp) {
-      process.stderr.write('ncl: command timed out after 30s\n');
+      process.stderr.write(`ncl: command timed out after ${timeoutMs / 1000}s\n`);
       process.exitCode = 2;
       return;
     }

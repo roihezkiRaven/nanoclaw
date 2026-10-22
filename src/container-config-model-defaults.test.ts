@@ -83,6 +83,11 @@ describe('install-wide model defaults', () => {
     expect(cfg.model).toBe('claude-sonnet-5');
   });
 
+  it('uses the Codex default only for a Codex group', async () => {
+    expect((await withEnv(CLEAR, { ...row, provider: 'codex' })).model).toBe('gpt-6-luna');
+    expect((await withEnv(CLEAR, { ...row, provider: 'claude' })).model).toBeUndefined();
+  });
+
   it("never overrides the group's own model", async () => {
     await updateContainerConfigScalars(GROUP.id, { model: 'claude-opus-5' });
     const withModel = (await getContainerConfig(GROUP.id))!;

@@ -1,3 +1,6 @@
+import { getPendingApproval, getSession } from '../../db/sessions.js';
+import { retryApprovalDelivery } from '../../modules/approvals/primitive.js';
+import { register } from '../registry.js';
 import { registerResource } from '../crud.js';
 
 registerResource({
@@ -50,4 +53,20 @@ registerResource({
     { name: 'options_json', type: 'json', description: 'Card button options as JSON array.' },
   ],
   operations: { list: 'open', get: 'open' },
+});
+
+register({
+  name: 'approval-delivery-retry',
+  access: 'open',
+  description: 'Retry delivery of your own pending approval card; never executes or approves the action.',
+  parseArgs: (args) => {
+    if (typeof args.id !== 'string') throw new Error('id is required');
+    return { id: args.id };
+  },
+  handler: async (args, ctx) => {
+    const row = await getPendingApproval(args.id);
+    const group = row?.agent_group_id ?? (row?.session_id ? (await getSession(row.session_id))?.agent_group_id : null);
+    if (!row || (ctx.caller === 'agent' && group !== ctx.agentGroupId)) throw new Error('Approval not found');
+    return { approval_id: args.id, delivery: await retryApprovalDelivery(args.id), action_executed: false };
+  },
 });

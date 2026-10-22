@@ -1,3 +1,4 @@
+import { taskSessionCancelled } from './modules/scheduling/cancellation.js';
 /**
  * Poll outbound mailboxes and deliver undelivered messages through channel adapters.
  * SQLite reads runner-owned outbound state read-only and records delivery in
@@ -211,6 +212,19 @@ export async function deliverSessionMessages(session: Session): Promise<void> {
   }
 }
 
+/** Recheck immediately before each publication/action, including queued CLI mutations. */
+export async function suppressCancelledTaskOutput(session: Session, messageId: string): Promise<boolean> {
+  if (!session.thread_id || !isTaskThread(session.thread_id)) return false;
+  const series = session.thread_id.slice(`${TASKS_SYSTEM_THREAD_ID}:`.length);
+  return (
+    (await withExistingMailboxSession(session.agent_group_id, session.id, (mailbox) => {
+      const cancelled = taskSessionCancelled(session.id) || mailbox.getTask(series)?.status === 'cancelled';
+      if (cancelled) mailbox.markDeliveryFailed(messageId);
+      return cancelled;
+    })) ?? false
+  );
+}
+
 async function drainSession(session: Session): Promise<void> {
   const agentGroup = await getAgentGroup(session.agent_group_id);
   if (!agentGroup) return;
@@ -255,6 +269,7 @@ async function drainSession(session: Session): Promise<void> {
 
   for (const msg of pending) {
     try {
+      if (await suppressCancelledTaskOutput(session, msg.id)) continue;
       const platformMsgId = await deliverMessage(msg, session);
       await withExistingMailboxSession(agentGroup.id, session.id, (mailbox) =>
         mailbox.markDelivered(msg.id, platformMsgId ?? null),

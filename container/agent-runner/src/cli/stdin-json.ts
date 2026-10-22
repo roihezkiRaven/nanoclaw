@@ -1,5 +1,5 @@
-/** Maximum structured CLI input accepted from stdin (64 KiB, measured as UTF-8 bytes). */
-export const MAX_STDIN_JSON_BYTES = 64 * 1024;
+/** Maximum structured CLI input accepted from stdin (1 MiB, measured as UTF-8 bytes). */
+export const MAX_STDIN_JSON_BYTES = 1024 * 1024;
 
 export type StdinJsonStream = AsyncIterable<string | Uint8Array>;
 

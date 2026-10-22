@@ -3,3 +3,9 @@ pnpm run format:fix
 if [ -n "$staged" ]; then
   echo "$staged" | xargs git add
 fi
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --staged --redact --no-banner || exit 1
+else
+  echo "Install gitleaks to enable staged secret scanning." >&2
+fi

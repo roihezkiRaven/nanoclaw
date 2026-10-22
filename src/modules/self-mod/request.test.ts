@@ -204,6 +204,7 @@ describe('add_mcp_server approval card', () => {
       name: 'docs',
       type: 'http',
       url: 'https://mcp.example.com/mcp',
+      delivery: { status: 'delivered', checked_at: expect.any(String) },
     });
   });
 
@@ -444,7 +445,12 @@ describe('add_mcp_server secret redaction', () => {
     expect(question).toContain(redactedForm(token));
 
     const rows = await getPendingApprovalsByAction('add_mcp_server');
-    expect(JSON.parse(rows[0].payload)).toEqual({ name: 'zap', type: 'http', url });
+    expect(JSON.parse(rows[0].payload)).toEqual({
+      name: 'zap',
+      type: 'http',
+      url,
+      delivery: { status: 'delivered', checked_at: expect.any(String) },
+    });
   });
 
   it('never redacts the origin and redacts secret-shaped query values', async () => {

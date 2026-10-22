@@ -1,0 +1,8 @@
+{
+  "group_id": "ag-configure-owner",
+  "reports": ["weekday-briefing-example", "whatsapp-daily-digest-example"],
+  "platform_destinations": {
+    "telegram": "telegram:123456789",
+    "slack": "slack:C0123456789"
+  }
+}

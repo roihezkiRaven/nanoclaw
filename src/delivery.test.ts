@@ -739,3 +739,31 @@ describe('deliverSessionMessages — post-delivery hooks', () => {
     expect(delivered.has('th-2')).toBe(true);
   });
 });
+
+it('suppresses queued publications and system mutations after task cancellation', async () => {
+  const { cancelTaskSession } = await import('./modules/scheduling/cancellation.js');
+  const { suppressCancelledTaskOutput } = await import('./delivery.js');
+  await seedAgentAndChannel();
+  const { session } = await resolveTaskSession('ag-1', 'cancel-before-publish');
+  await withMailboxSession('ag-1', session.id, (db) =>
+    db.insertTask({
+      id: 'cancel-before-publish',
+      seriesId: 'cancel-before-publish',
+      processAfter: now(),
+      recurrence: null,
+      content: JSON.stringify({ prompt: 'x' }),
+    }),
+  );
+  insertOutbound('ag-1', session.id, 'must-not-send');
+  cancelTaskSession(session.id);
+  const deliver = vi.fn();
+  setDeliveryAdapter({ deliver });
+  await deliverSessionMessages(session);
+  expect(deliver).not.toHaveBeenCalled();
+  expect(await suppressCancelledTaskOutput(session, 'queued-cli-mutation')).toBe(true);
+  const db = openInboundDb('ag-1', session.id);
+  expect(db.prepare('SELECT status FROM delivered WHERE message_out_id=?').get('must-not-send')).toEqual({
+    status: 'failed',
+  });
+  db.close();
+});

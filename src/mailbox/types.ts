@@ -57,6 +57,7 @@ export type OutboundMessage = OutboundDelivery;
 export type Task = TaskWrite;
 
 export interface TaskUpdate {
+  timezone?: string | null;
   prompt?: string;
   script?: string | null;
   recurrence?: string | null;

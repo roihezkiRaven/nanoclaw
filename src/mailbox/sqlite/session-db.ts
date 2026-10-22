@@ -157,7 +157,7 @@ export function syncProcessingAcks(inDb: Database.Database, outDb: Database.Data
   );
   inDb.transaction(() => {
     for (const { message_id, status } of completed) {
-      (status === 'script-skip:error' ? failStmt : completeStmt).run(message_id);
+      (status === 'failed' || status === 'script-skip:error' ? failStmt : completeStmt).run(message_id);
     }
   })();
 }
