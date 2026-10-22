@@ -2,6 +2,7 @@
 """Mirror the local personal knowledge wiki into its dedicated Drive folder."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -74,7 +75,10 @@ def main() -> None:
         media = MediaFileUpload(str(file_path), mimetype="text/markdown", resumable=False)
         body = {"name": relative.name, "parents": [folders[parent]], "mimeType": "text/markdown"}
         if relative.as_posix() in state:
-            current = drive.files().get(fileId=state[relative.as_posix()], fields="parents").execute().get("parents", [])
+            metadata = drive.files().get(fileId=state[relative.as_posix()], fields="parents,md5Checksum").execute()
+            current = metadata.get("parents", [])
+            if folders[parent] in current and metadata.get("md5Checksum") == hashlib.md5(file_path.read_bytes()).hexdigest():
+                continue
             drive.files().update(
                 fileId=state[relative.as_posix()], body={"name": relative.name}, media_body=media,
                 addParents=folders[parent] if folders[parent] not in current else None,

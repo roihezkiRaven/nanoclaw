@@ -34,6 +34,34 @@ def frontmatter(text: str) -> dict[str, str] | None:
     return result
 
 
+def project_output_error(root: Path, source_id: str, item: dict, output: str) -> str | None:
+    """Verify a claimed canonical project update cites this exact source revision."""
+    target = (root / output).resolve()
+    if not target.is_relative_to(root.resolve()) or target.parent != (root / "projects").resolve() or not target.is_file():
+        return "project output must be an existing canonical project page"
+    if not isinstance(item.get("outputs"), list) or output not in item["outputs"]:
+        return "project output is absent from outputs"
+    text = target.read_text(encoding="utf-8")
+    meta = frontmatter(text)
+    if not meta or meta.get("type") != "project":
+        return "project output is not a project page"
+    header = text.split("---", 2)[1]
+    for block in re.split(r"(?m)^\s+- id:", header)[1:]:
+        if block.splitlines()[0].strip(" \"'") == source_id:
+            modified = re.search(r"(?m)^\s+modified:\s*(.+)$", block)
+            if modified and modified.group(1).strip(" \"'") == item.get("modifiedTime"):
+                return None
+    return "project output lacks the exact source ID and observed modification time"
+
+
+def project_checkpoint_errors(root: Path, source_id: str, item: dict) -> list[str]:
+    projects = item.get("project_outputs", [])
+    if not isinstance(projects, list) or any(not isinstance(path, str) for path in projects):
+        return [f"{source_id}: project_outputs must be a list of canonical paths"]
+    return [f"{source_id}: {error}: {path}" for path in projects
+            if (error := project_output_error(root, source_id, item, path))]
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for path in sorted(root.rglob("*.md")):
@@ -92,6 +120,8 @@ def validate(root: Path) -> list[str]:
                 for item in entries.values()
             ):
                 raise ValueError("expected a source map with observed modification times")
+            for source_id, item in entries.items():
+                errors.extend(f"{checkpoint.relative_to(root)}: {message}" for message in project_checkpoint_errors(root, source_id, item))
         except (OSError, ValueError) as exc:
             errors.append(f"{checkpoint.relative_to(root)}: invalid checkpoint: {exc}")
     return errors

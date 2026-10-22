@@ -1,6 +1,8 @@
 """Keep ancestry checks on the reader and uploads on the restricted writer."""
 
 import sys
+import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +56,25 @@ class SyncCredentialsTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "upload failed"):
                 subject.main()
             self.assertEqual(json.loads((Path(root) / ".drive-sync.json").read_text()), {"a.md": "first_page_123"})
+
+    def test_only_changed_content_or_placement_is_uploaded(self):
+        digest = hashlib.md5(b"# Evidence\n").hexdigest()
+        for remote_digest, parents, upload in [(digest, ["target_folder_123"], False),
+                                                ("different", ["target_folder_123"], True),
+                                                (digest, ["wrong_folder_123"], True)]:
+            with self.subTest(digest=remote_digest, parents=parents), tempfile.TemporaryDirectory() as root:
+                writer = MagicMock()
+                writer.files().get.return_value.execute.return_value = {"parents": parents, "md5Checksum": remote_digest}
+                (Path(root) / "page.md").write_text("# Evidence\n")
+                state = Path(root) / ".drive-sync.json"
+                state.write_text(json.dumps({"page.md": "existing_page_123"}))
+                with patch.object(sys, "argv", ["sync", "--source", root, "--drive-folder", "target_folder_123"]), \
+                     patch.object(subject, "service", return_value=writer), \
+                     patch.object(subject, "writer_parent", return_value="target_folder_123"):
+                    subject.main()
+                self.assertEqual(writer.files().update.called, upload)
+                writer.files().create.assert_not_called()
+                self.assertEqual(json.loads(state.read_text()), {"page.md": "existing_page_123"})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Regression checks for knowledge isolation and metadata validation."""
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,6 +73,33 @@ class KnowledgeValidationTest(unittest.TestCase):
         errors = validator.validate(self.root)
         self.assertTrue(any("copied timestamped" in e for e in errors))
         self.assertTrue(any("sender identifier" in e for e in errors))
+
+    def project_checkpoint(self, outputs):
+        item = {"modifiedTime": "2026-10-22T10:00:00Z", "outputs": outputs, "project_outputs": outputs}
+        (self.root / "ingestion.json").write_text(json.dumps({"files": {"source": item}}))
+
+    def test_project_checkpoint_requires_a_canonical_project_not_an_archive(self):
+        self.page("topics/archive.md", META.replace("sources: []", "sources: []") + "source")
+        self.project_checkpoint(["topics/archive.md"])
+        self.assertTrue(any("canonical project page" in e for e in validator.validate(self.root)))
+
+    def test_project_checkpoint_requires_exact_revision_not_just_a_source_mention(self):
+        self.page("projects/client.md", META.replace("type: topic", "type: project") + "source")
+        self.project_checkpoint(["projects/client.md"])
+        self.assertTrue(any("exact source ID" in e for e in validator.validate(self.root)))
+        source = "sources:\n  - id: source\n    modified: 2026-10-21T10:00:00Z"
+        self.page("projects/client.md", META.replace("type: topic", "type: project").replace("sources: []", source))
+        self.assertTrue(any("observed modification time" in e for e in validator.validate(self.root)))
+
+    def test_project_checkpoint_accepts_current_cited_project(self):
+        source = "sources:\n  - id: source\n    modified: 2026-10-22T10:00:00Z"
+        self.page("projects/client.md", META.replace("type: topic", "type: project").replace("sources: []", source))
+        self.project_checkpoint(["projects/client.md"])
+        self.assertEqual(validator.validate(self.root), [])
+
+    def test_project_checkpoint_rejects_malformed_lists(self):
+        self.project_checkpoint("projects/client.md")
+        self.assertTrue(any("project_outputs must be a list" in e for e in validator.validate(self.root)))
 
 
 if __name__ == "__main__":

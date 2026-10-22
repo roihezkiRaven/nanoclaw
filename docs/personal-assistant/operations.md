@@ -2,6 +2,27 @@
 
 This document describes the deployed personal-assistant data flows. It intentionally excludes credentials, tokens, folder IDs, and WhatsApp group IDs; those stay in protected host configuration.
 
+## Project freshness verification
+
+A current Drive modification time proves publication, not source ingestion or
+correct project consolidation. Verify the complete approved-source inventory
+against source IDs and revisions in the checkpoint, inspect dated canonical
+project status and actions, then verify published bytes against local outputs.
+Historical summaries alone do not complete a material project update.
+Publishing compares the existing Drive checksum and placement before uploading;
+unchanged content keeps its existing Drive modification time.
+
+Project updates declare `project_outputs` in the checkpoint. The validator
+requires those paths to be real canonical project pages included in `outputs`,
+with the exact source ID and observed modification time in frontmatter. It does
+not prove semantic completeness; reconcile contradictory status and client
+identity against the source text. Keep review dates distinct from evidence dates
+and never infer completion from an elapsed deadline. Ingestion is a scheduled
+batch; notes arriving afterward await the next pass unless explicitly replayed.
+
+Google OAuth token files are published atomically with private permissions so
+concurrent Drive readers cannot observe a partially rewritten credential.
+
 ## Source preservation and health monitoring
 
 Commit and push authorized code, tests, templates and deploy configuration before

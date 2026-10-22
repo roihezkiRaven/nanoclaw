@@ -31,6 +31,8 @@ must link to one or more existing canonical Timeless pages. Mark inferences,
 uncertainty, stale status, and conflicts explicitly. Never invent owners,
 deadlines, status, relationships, or decisions.
 
+For current state, prefer each project's dated current-status section over historical snapshots and old tasks. A source cited somewhere in the graph does not prove its current project facts were consolidated. Surface missing project overviews, contradictory status, uncertain client attribution and stale rollups as defects. Never carry an old unresolved choice forward after later evidence describes implementation; never infer a deployment succeeded from a plan or deadline. Link current project entry points so newly ingested clients and workstreams are discoverable.
+
 Keep the brain compact and navigable. Do not copy raw notes, credentials,
 transcripts, media, WhatsApp content, or whole source pages. Do not update
 anything outside `brain/` except one concise operational log entry. Do not

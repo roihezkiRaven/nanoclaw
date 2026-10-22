@@ -9,6 +9,33 @@ import gdrive_assistant as subject
 from google.auth.exceptions import RefreshError
 
 
+class AtomicTokenTest(unittest.TestCase):
+    def test_readers_keep_the_complete_previous_token_until_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "reader-token.json"
+            destination.write_text("old grant")
+            replace = Path.replace
+            def publish(temporary, target):
+                self.assertEqual(destination.read_text(), "old grant")
+                self.assertEqual(temporary.read_text(), "new grant")
+                self.assertEqual(temporary.stat().st_mode & 0o777, 0o600)
+                return replace(temporary, target)
+            with patch.object(Path, "replace", publish):
+                subject.save_token(destination, "new grant")
+            self.assertEqual(destination.read_text(), "new grant")
+            self.assertEqual(list(Path(directory).iterdir()), [destination])
+
+    def test_failed_publication_preserves_the_previous_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "reader-token.json"
+            destination.write_text("old grant")
+            with patch.object(Path, "replace", side_effect=OSError("disk failure")):
+                with self.assertRaises(OSError):
+                    subject.save_token(destination, "new grant")
+            self.assertEqual(destination.read_text(), "old grant")
+            self.assertEqual(list(Path(directory).iterdir()), [destination])
+
+
 class OAuthRecoveryTest(unittest.TestCase):
     def test_auth_replaces_a_revoked_token_with_browser_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

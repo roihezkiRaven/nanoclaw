@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -43,6 +44,15 @@ def env_value(name: str) -> str:
     return ""
 
 
+def save_token(token_path: Path, content: str) -> None:
+    """Publish a complete private token atomically for concurrent readers."""
+    with tempfile.TemporaryDirectory(dir=token_path.parent, prefix=".oauth-") as directory:
+        temporary = Path(directory) / "token.json"
+        temporary.write_text(content)
+        temporary.chmod(0o600)
+        temporary.replace(token_path)
+
+
 def service(mode: str, authorize: bool):
     token_path = TOKENS[mode]
     creds = Credentials.from_authorized_user_file(token_path, SCOPES[mode]) if token_path.exists() and not authorize else None
@@ -68,8 +78,7 @@ def service(mode: str, authorize: bool):
             access_type="offline",
             prompt="consent",
         )
-    token_path.write_text(creds.to_json())
-    token_path.chmod(0o600)
+    save_token(token_path, creds.to_json())
     api = "calendar" if mode == "calendar" else "drive"
     return build(api, "v3", credentials=creds, cache_discovery=False)
 
