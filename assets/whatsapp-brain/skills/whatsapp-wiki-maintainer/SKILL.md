@@ -10,7 +10,9 @@ The canonical WhatsApp wiki is the `whatsapp/` subtree of
 archive folder specified by the scheduled task. Do not use WhatsApp Web,
 credentials, or any messaging tool.
 
-Use the Google Drive skill's `tree` operation with `max_depth: 0` and a limit large enough for the complete folder to enumerate the archive folder; do not use a capped search or assume the first page is complete. Consider only new `whatsapp-raw-*.jsonl` files whose Drive ID and modified time are absent or changed in `/workspace/extra/timeless-wiki/whatsapp-ingestion.json`. Process every eligible source individually, one at a time, without a numerical cap. After a source's durable update succeeds, checkpoint it immediately, so an interrupted run resumes safely.
+Use the Google Drive skill's `list` operation on the approved archive folder. Follow every `next_page_token` as `page_token` until `complete=true`; do not use a bounded tree or assume the first page is complete. Persist the inventory and reconcile all dates against the checkpoint, including older missed sources. An incomplete listing is a blocked inventory, never a successful no-change pass. Consider all new or changed `whatsapp-raw-*.jsonl` files whose Drive ID and modified time are absent or changed in `/workspace/extra/timeless-wiki/whatsapp-ingestion.json`. Process every eligible source individually, one at a time, without a numerical cap. After a source's durable update succeeds, checkpoint it immediately, so an interrupted run resumes safely.
+
+Persist each complete source read immediately under `/workspace/agent/source-cache/<file-id>.json` with its observed metadata and complete text. Reuse it only when its ID and modified time still match the complete inventory. Never keep the only copy of fetched data in `/tmp` or process memory. Save partial progress before the runtime turn limit; resume cached sources without downloading them again. A fetched source is not an ingestion checkpoint until its digests are durable.
 
 For each source, first parse every JSONL record and partition the records by
 `groupJid`. You must handle every distinct group represented in the source;
@@ -48,3 +50,7 @@ digest rather than promoting it into the Timeless graph.
 Every page must have frontmatter with `type`, `title`, `description`, `tags`, `generated`, and `sources`. Links and backlinks may target only existing pages below `whatsapp/`; never link into the Timeless graph. Preserve human-written material. Never include raw chat logs, phone numbers, credentials, or speculative claims.
 
 After each pass, append a concise operational entry to `log.md`. If no archive source changed, make no wiki-content changes.
+
+Link every daily digest from its group index and every group index from `whatsapp/index.md`. Refresh generated coverage counts when the archive grows; never leave September-only navigation hiding newer digests. Record each newly processed source's `disposition`, `outputs`, and a source-specific `reason` in its checkpoint so fetches cannot be mistaken for completed ingestion.
+
+A no-record coverage check is `type: coverage-status`, not a daily digest or evidence of an empty current archive. A factual daily digest requires an exact source-backed group JID and nonempty sources; never use `cross-group` as its identity.

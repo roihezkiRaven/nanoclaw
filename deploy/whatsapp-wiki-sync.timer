@@ -3,6 +3,7 @@ Description=Daily WhatsApp knowledge Drive mirror
 
 [Timer]
 OnCalendar=*-*-* 04:20:00 UTC
+OnCalendar=Sun *-*-* 06:20:00 UTC
 Persistent=true
 
 [Install]

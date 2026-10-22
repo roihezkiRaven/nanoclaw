@@ -6,6 +6,7 @@ import path from 'path';
 
 import {
   Browsers,
+  BufferJSON,
   DisconnectReason,
   fetchLatestWaWebVersion,
   getContentType,
@@ -15,6 +16,7 @@ import {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
+import QRCode from 'qrcode';
 
 const ROOT = '/home/assistant/nanoclaw';
 const CONFIG = path.join(ROOT, 'config', 'whatsapp-collector.json');
@@ -41,9 +43,9 @@ type ArchiveRecord = {
   text: string;
 };
 
-function fail(message: string): never {
+function fail(message: string, code = 1): never {
   console.error(`whatsapp-collector: ${message}`);
-  process.exit(1);
+  process.exit(code);
 }
 
 function loadConfig(): Config {
@@ -66,11 +68,86 @@ function loadConfig(): Config {
   return { allowedGroups, archiveParentId, activationAfter };
 }
 
-function atomicWrite(file: string, contents: string): void {
+function atomicWrite(file: string, contents: string | Buffer): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporary, contents, { mode: 0o600 });
+  const fd = fs.openSync(temporary, 'w', 0o600);
+  try { fs.writeFileSync(fd, contents); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   fs.renameSync(temporary, file);
+  const directory = fs.openSync(path.dirname(file), 'r');
+  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
+}
+
+async function collectorAuth(pairing = false) {
+  const file = path.join(AUTH_DIR, 'creds.json');
+  if (!pairing) {
+    try {
+      const creds = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!creds.me?.id || !creds.signedIdentityKey?.private || !creds.noiseKey?.private) throw new Error();
+    } catch { fail('missing/corrupt credentials; stop collector and run pair to relink', 78); }
+  }
+  const { state } = await useMultiFileAuthState(AUTH_DIR);
+  state.keys.set = async (data) => {
+    for (const [category, entries] of Object.entries(data)) {
+      for (const [id, value] of Object.entries(entries ?? {})) {
+        const name = `${category}-${id}.json`.replace(/\//g, '__').replace(/:/g, '-');
+        const target = path.join(AUTH_DIR, name);
+        if (value) atomicWrite(target, JSON.stringify(value, BufferJSON.replacer));
+        else fs.rmSync(target, { force: true });
+      }
+    }
+  };
+  const saveCreds = () => {
+    if (fs.existsSync(file) && fs.statSync(file).size > 0) {
+      atomicWrite(`${file}.backup`, fs.readFileSync(file, 'utf8'));
+    }
+    atomicWrite(file, JSON.stringify(state.creds, BufferJSON.replacer));
+  };
+  return { state, saveCreds };
+}
+
+async function pair(): Promise<void> {
+  const service = spawn('systemctl', ['--user', 'is-active', '--quiet', 'whatsapp-collector.service']);
+  const running = await new Promise<boolean>((resolve) => service.on('exit', (code) => resolve(code === 0)));
+  if (running) fail('stop whatsapp-collector.service before pairing');
+  if (fs.existsSync(AUTH_DIR)) fs.renameSync(AUTH_DIR, `${AUTH_DIR}.prelink-${Date.now()}`);
+  const { state, saveCreds } = await collectorAuth(true);
+  const sock = makeWASocket({ version: await version(), auth: state, logger,
+    browser: Browsers.macOS('Chrome'), syncFullHistory: false });
+  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) void savePairingQr(qr);
+    if (connection === 'open') {
+      saveCreds();
+      sock.end(undefined);
+      void finishPairing();
+    }
+    if (connection === 'close') {
+      const code = (lastDisconnect?.error as { output?: { statusCode?: number } })?.output?.statusCode;
+      if (code === DisconnectReason.restartRequired) { void finishPairing(); return; }
+      fail(`pairing failed (code=${code ?? 'unknown'})`);
+    }
+  });
+}
+
+async function savePairingQr(qr: string): Promise<void> {
+  const file = path.join(AUTH_DIR, 'pairing-qr.png');
+  try {
+    const png = await QRCode.toBuffer(qr, { width: 512, margin: 4 });
+    atomicWrite(file, png);
+    console.log('whatsapp-collector: pairing QR ready');
+  } catch { fail('could not render pairing QR'); }
+}
+
+async function finishPairing(): Promise<void> {
+  await collectorAuth();
+  fs.rmSync(path.join(AUTH_DIR, 'pairing-qr.png'), { force: true });
+  const child = spawn('systemctl', ['--user', 'start', 'whatsapp-collector.service']);
+  child.on('error', () => fail('pairing saved but collector could not start'));
+  const code = await new Promise<number | null>((resolve) => child.on('exit', resolve));
+  if (code !== 0) fail('pairing saved but collector could not start');
+  console.log('whatsapp-collector: pairing saved; collector started');
+  process.exit(0);
 }
 
 function heartbeat(): void {
@@ -163,7 +240,7 @@ function archive(records: ArchiveRecord[], parentId: string): Promise<void> {
 }
 
 async function listGroups(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { state, saveCreds } = await collectorAuth();
   const sock = makeWASocket({ version: await version(), auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) }, logger, browser: Browsers.macOS('Chrome'), syncFullHistory: false });
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
@@ -191,6 +268,8 @@ async function collect(): Promise<void> {
       await archive(batch.map(({ record }) => record), config.archiveParentId);
       for (const { record } of batch) seen.add(recordKey(record));
       saveSeen(seen);
+      atomicWrite(path.join(STATE_DIR, 'last-upload'), `${new Date().toISOString()}\n`);
+      console.log(`whatsapp-collector: archived ${batch.length} records`);
       for (const { file } of batch) {
         fs.rmSync(file, { force: true });
       }
@@ -198,7 +277,9 @@ async function collect(): Promise<void> {
       console.error(`whatsapp-collector: archive failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally { flushing = false; }
   };
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  fs.rmSync(HEARTBEAT_FILE, { force: true });
+  const { state, saveCreds } = await collectorAuth();
+  let connected = false;
   const sock = makeWASocket({
     version: await version(), auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) }, logger,
     browser: Browsers.macOS('Chrome'), syncFullHistory: false,
@@ -219,20 +300,27 @@ async function collect(): Promise<void> {
     }
   });
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-    if (connection === 'open') heartbeat();
+    if (connection === 'open') {
+      connected = true;
+      heartbeat();
+      console.log('whatsapp-collector: connected');
+    }
     if (connection === 'close') {
+      connected = false;
+      fs.rmSync(HEARTBEAT_FILE, { force: true });
       const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-      if (code === DisconnectReason.loggedOut) fail('logged out; relink required');
-      console.error('whatsapp-collector: connection closed; systemd will restart the collector');
+      if (code === DisconnectReason.loggedOut) fail('logged out; relink required', 78);
+      console.error(`whatsapp-collector: connection closed (code=${code ?? 'unknown'}); systemd will restart the collector`);
       process.exit(1);
     }
   });
   void flush();
-  setInterval(heartbeat, 30_000).unref();
+  setInterval(() => { if (connected) heartbeat(); }, 30_000).unref();
   setInterval(() => void flush(), UPLOAD_INTERVAL_MS).unref();
   process.on('SIGTERM', () => { void flush().finally(() => process.exit(0)); });
 }
 
 if (process.argv[2] === 'list-groups') void listGroups();
 else if (process.argv[2] === 'collect') void collect();
-else fail('usage: whatsapp_collector.ts <list-groups|collect>');
+else if (process.argv[2] === 'pair') void pair();
+else fail('usage: whatsapp_collector.ts <list-groups|collect|pair>');

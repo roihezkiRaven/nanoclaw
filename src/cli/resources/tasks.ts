@@ -30,7 +30,7 @@ import { appendRunLog, deleteRunLog } from '../../modules/scheduling/run-log.js'
 import { formatTasksTable } from '../format-tasks.js';
 import type { CallerContext } from '../frame.js';
 import type { InboundMailbox } from '../../mailbox/index.js';
-import { isContainerRunning } from '../../container-runner.js';
+import { isContainerRunning, killContainer } from '../../container-runner.js';
 
 type TaskStatus = 'pending' | 'paused';
 
@@ -372,15 +372,16 @@ async function updateTaskCommand(args: Record<string, unknown>, ctx: CallerConte
 }
 
 async function cancelTaskCommand(args: Record<string, unknown>, ctx: CallerContext) {
-  if (!bool(args.all)) {
-    return mutateTask(args, ctx, (mailbox, id) => mailbox.cancelTask(id));
-  }
-
+  const id = bool(args.all) ? undefined : taskId(args);
   let touched = 0;
   for (const session of await selectedSessions(args, ctx)) {
-    touched += (await withInbound(session, (mailbox) => mailbox.cancelTask())) ?? 0;
+    const changed = (await withInbound(session, (mailbox) => mailbox.cancelTask(id))) ?? 0;
+    touched += changed;
+    const thread = (await getSession(session.id))?.thread_id;
+    if (changed && thread && isTaskThread(thread)) killContainer(session.id, 'task-cancelled');
   }
-  return { cancelled: touched };
+  if (id && !touched) throw new Error(`no live task matched: ${id}`);
+  return id ? { series_id: id, touched } : { cancelled: touched };
 }
 
 /**

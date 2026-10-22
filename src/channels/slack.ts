@@ -180,6 +180,7 @@ export function createSlackBridge(options: SlackBridgeOptions = {}): ChannelAdap
     instance: options.instanceKey, // undefined ⇒ default instance (keyed by channelType)
     concurrency: 'concurrent',
     supportsThreads: true,
+    maxTextLength: 2800,
     defaults: SLACK_DEFAULTS,
   });
   bridge.resolveChannelName = async (platformId: string) => {

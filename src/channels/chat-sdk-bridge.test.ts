@@ -542,3 +542,32 @@ describe('createChatSdkBridge.deliver — display cards (send_card)', () => {
     expect(msg.markdown).toBe('plain hello');
   });
 });
+
+describe('Telegram formatting fallback', () => {
+  it('retries rejected entities as plain text and preserves the receipt', async () => {
+    const postMessage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Bad Request: can't parse entities"))
+      .mockResolvedValueOnce({ id: 'telegram:42:9' });
+    const bridge = createChatSdkBridge({
+      adapter: stubAdapter({ name: 'telegram', postMessage }),
+      supportsThreads: false,
+    });
+    expect(await bridge.deliver('telegram:42', null, { kind: 'chat', content: { text: 'A [broken](url' } })).toBe(
+      'telegram:42:9',
+    );
+    expect(postMessage.mock.calls[1][1]).toEqual({ raw: 'A [broken](url' });
+  });
+
+  it('does not retry ambiguous network failures', async () => {
+    const postMessage = vi.fn().mockRejectedValue(new Error('connection reset'));
+    const bridge = createChatSdkBridge({
+      adapter: stubAdapter({ name: 'telegram', postMessage }),
+      supportsThreads: false,
+    });
+    await expect(bridge.deliver('telegram:42', null, { kind: 'chat', content: { text: 'hello' } })).rejects.toThrow(
+      'connection reset',
+    );
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+});

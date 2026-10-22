@@ -10,7 +10,7 @@ SSH_PORT="${SSH_PORT:-22}"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  ca-certificates curl git build-essential python3-venv gh docker.io ufw unattended-upgrades
+  ca-certificates curl git build-essential python3-venv gh docker.io ufw unattended-upgrades ffmpeg
 
 id -u assistant >/dev/null 2>&1 || useradd --create-home --shell /bin/bash --groups sudo,docker assistant
 usermod -aG sudo,docker assistant

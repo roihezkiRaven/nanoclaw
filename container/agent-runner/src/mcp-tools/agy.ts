@@ -4,6 +4,10 @@ import type { McpToolDefinition } from './types.js';
 
 const MODEL_RE = /^(?:gemini|claude|gpt-oss)-[a-z0-9][a-z0-9._-]{0,79}$/i;
 const AGY_MODELS = new Set([
+  'gemini-4-argon',
+  'gemini-4-argon-high',
+  'gemini-4-argon-medium',
+  'gemini-4-argon-low',
   'gemini-3.8-flash-high',
   'gemini-3.8-flash-medium',
   'gemini-3.8-flash-low',
@@ -75,7 +79,7 @@ export const runAgy: McpToolDefinition = {
       type: 'object' as const,
       properties: {
         prompt: { type: 'string', description: `Task prompt (maximum ${MAX_PROMPT_CHARS} characters).` },
-        model: { type: 'string', description: 'Optional model, e.g. gemini-3.7-flash-medium.' },
+        model: { type: 'string', description: 'Optional model, e.g. gemini-4-argon-high or gemini-3.8-flash-medium.' },
         effort: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Optional reasoning effort.' },
       },
       required: ['prompt'],
@@ -105,25 +109,35 @@ export const runAgyMedia: McpToolDefinition = {
   tool: {
     name: 'run_agy_media',
     description:
-      'Analyze one explicitly selected video attachment with the owner-authenticated Antigravity CLI. Pass the attachment path from the current message (for example /workspace/inbox/<message-id>/<filename>). Only .mp4, .mov, .webm, and .avi files up to 256 MB are accepted; no Drive files or credentials are mounted.',
+      'Analyze one explicitly selected video attachment with the owner-authenticated Antigravity CLI. Pass the attachment path from the current message (for example /workspace/inbox/<message-id>/<filename>). Alternatively pass file_id for one owner-selected Google Drive video. Only .mp4, .mov, .webm, and .avi files up to 256 MB are accepted; credentials remain on the host.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        path: { type: 'string', description: 'One selected video under /workspace/inbox/.' },
+        path: { type: 'string', description: 'One selected video under /workspace/inbox/. Omit when using file_id.' },
+        start_seconds: { type: 'number', minimum: 0, description: 'Optional start offset in the original recording.' },
+        duration_seconds: {
+          type: 'number',
+          exclusiveMinimum: 0,
+          description: 'Optional clip length. Omit to analyze the entire remaining video.',
+        },
+        file_id: { type: 'string', description: 'One owner-selected Google Drive video ID. Omit when using path.' },
         prompt: { type: 'string', description: `Task prompt (maximum ${MAX_PROMPT_CHARS} characters).` },
-        model: { type: 'string', description: 'Optional model, e.g. gemini-3.7-flash-medium.' },
+        model: { type: 'string', description: 'Optional model, e.g. gemini-4-argon-high or gemini-3.8-flash-medium.' },
         effort: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Optional reasoning effort.' },
       },
-      required: ['path', 'prompt'],
+      required: ['prompt'],
     },
   },
   async handler(args) {
     const mediaPath = typeof args.path === 'string' ? args.path.trim() : '';
-    if (!mediaPath) return err('path is required');
+    const fileId = typeof args.file_id === 'string' ? args.file_id.trim() : '';
+    if (!!mediaPath === !!fileId) return err('provide exactly one of path or file_id');
+    if (fileId && !/^[A-Za-z0-9_-]{10,100}$/.test(fileId)) return err('file_id is invalid');
     if (
-      mediaPath.length > MAX_MEDIA_PATH_CHARS ||
-      !mediaPath.startsWith('/workspace/inbox/') ||
-      mediaPath.includes('..')
+      mediaPath &&
+      (mediaPath.length > MAX_MEDIA_PATH_CHARS ||
+        !mediaPath.startsWith('/workspace/inbox/') ||
+        mediaPath.includes('..'))
     ) {
       return err('path must be one selected video under /workspace/inbox/');
     }
@@ -136,7 +150,16 @@ export const runAgyMedia: McpToolDefinition = {
     const effort = typeof args.effort === 'string' ? args.effort.toLowerCase() : undefined;
     if (effort && !EFFORTS.has(effort)) return err('effort must be low, medium, or high');
     try {
-      const raw = await runNclMedia({ request_id: generateId(), path: mediaPath, prompt, model, effort });
+      const raw = await runNclMedia({
+        request_id: generateId(),
+        path: mediaPath || undefined,
+        file_id: fileId || undefined,
+        start_seconds: args.start_seconds,
+        duration_seconds: args.duration_seconds,
+        prompt,
+        model,
+        effort,
+      });
       const frame = JSON.parse(raw) as { ok?: boolean; data?: unknown; error?: { message?: string } };
       if (!frame.ok) return err(frame.error?.message || 'Antigravity media request failed');
       return ok(JSON.stringify(frame.data));

@@ -13,7 +13,7 @@ unrelated group memory.
 
 Maintain only these files:
 
-- `brain/index.md` — navigation and scope.
+- `brain/index.md` — navigation and scope, including links to every existing weekly synthesis.
 - `brain/overview.md` — highest-value cross-domain synthesis.
 - `brain/active-work.md` — active projects and tasks, with status grounded in
   canonical pages.
@@ -39,3 +39,7 @@ omit it or place it under unresolved questions with a source link.
 
 Before finishing, run the knowledge-wiki validator, repair broken links, and
 report source-page coverage and output paths.
+
+Resolve every relative link from the containing file's directory. Weekly pages are one directory deeper than overview pages; never copy overview links unchanged into `brain/weekly/`.
+
+Preserve every existing weekly snapshot when rebuilding the current week; never clear or replace the weekly directory. Keep historical snapshots linked from the brain index.

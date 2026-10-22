@@ -12,7 +12,7 @@ WhatsApp JSONL, WhatsApp credentials, Timeless pages, or unrelated group memory.
 
 Maintain these pages only:
 
-- `brain/index.md` — navigation and scope.
+- `brain/index.md` — navigation and scope, including links to every existing weekly synthesis.
 - `brain/overview.md` — current cross-group synthesis and highest-value signals.
 - `brain/tools-and-models.md` — tools, products, models, and practical status.
 - `brain/patterns-and-techniques.md` — reusable workflows, prompts, architectures,
@@ -37,3 +37,9 @@ edits where possible and keep the brain compact enough to read as a briefing.
 
 The brain is read-only with respect to source pages and Drive. It may update only
 the `whatsapp/brain/` subtree and its own operational log entry.
+
+Resolve every relative link from the containing file's directory. Weekly pages are one directory deeper than overview pages; never copy overview links unchanged into `brain/weekly/`. Verify every output link and required frontmatter before reporting completion.
+
+Exclude `coverage-status` pages from learning evidence; historical no-record checks do not establish facts about a group or the current archive.
+
+Preserve every existing weekly snapshot when rebuilding the current week; never clear or replace the weekly directory. Keep historical snapshots linked from the brain index.

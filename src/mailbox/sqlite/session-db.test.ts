@@ -10,6 +10,7 @@ import path from 'path';
 import { describe, it, expect, afterEach } from 'vitest';
 
 import { ensureSchema, getInboundSourceSessionId, migrateMessagesInTable, syncProcessingAcks } from './session-db.js';
+import { parseIsoTimestamp } from '../model.js';
 
 const TEST_DIR = '/tmp/nanoclaw-session-db-test';
 const DB_PATH = path.join(TEST_DIR, 'inbound.db');
@@ -121,6 +122,22 @@ describe('syncProcessingAcks — script-skip counter', () => {
 
   const status = (inDb: InstanceType<typeof Database>, id: string) =>
     (inDb.prepare('SELECT status FROM messages_in WHERE id = ?').get(id) as { status: string }).status;
+
+  it('provider failure stays failed when synchronized, including the live mailbox wrapper', async () => {
+    const { inDb, outDb } = freshPair();
+    seedTask(inDb, 'provider-error', {});
+    ack(outDb, 'provider-error', 'failed');
+    syncProcessingAcks(inDb, outDb);
+    expect(status(inDb, 'provider-error')).toBe('failed');
+    inDb.prepare("UPDATE messages_in SET status = 'processing'").run();
+    const { wrapSqliteInbound } = await import('./index.js');
+    wrapSqliteInbound(inDb).applyProcessingAcks([
+      { messageId: 'provider-error', status: 'failed', statusChanged: parseIsoTimestamp(new Date().toISOString()) },
+    ]);
+    expect(status(inDb, 'provider-error')).toBe('failed');
+    inDb.close();
+    outDb.close();
+  });
 
   it('script-skip:error ack lands the row as a FAILED run (streak-derivable history)', () => {
     const { inDb, outDb } = freshPair();

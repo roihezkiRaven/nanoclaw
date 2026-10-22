@@ -34,9 +34,17 @@ def child_folder(drive, parent_id: str, name: str) -> str:
 def load_state(path: Path) -> dict[str, str]:
     try:
         value = json.loads(path.read_text())
-        return value if isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()) else {}
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return {}
+    if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+        raise ValueError(f"invalid sync state: {path}")
+    return value
+
+
+def save_state(path: Path, state: dict[str, str]) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\n")
+    temporary.replace(path)
 
 
 def main() -> None:
@@ -52,7 +60,7 @@ def main() -> None:
         raise SystemExit("source must be a directory")
 
     drive = service("writer", authorize=False)
-    target = writer_parent(drive, args.drive_folder)
+    target = writer_parent(service("reader", authorize=False), args.drive_folder)
     state_path = args.state_file or root / ".drive-sync.json"
     state = load_state(state_path)
     folders = {Path("."): target}
@@ -74,9 +82,8 @@ def main() -> None:
             ).execute()
         else:
             state[relative.as_posix()] = drive.files().create(body=body, media_body=media, fields="id").execute()["id"]
-    temporary = state_path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, sort_keys=True) + "\n")
-    temporary.replace(state_path)
+        save_state(state_path, state)
+    save_state(state_path, state)
     print(json.dumps({"synced": len(state)}))
 
 

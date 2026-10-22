@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { getAgentMailbox } from './mailbox/index.js';
 
 import { initTestSessionDb, closeSessionDb, getInboundDb, getOutboundDb } from './mailbox/sqlite/connection.js';
 import { getPendingMessages, markCompleted } from './db/messages-in.js';
@@ -490,6 +491,45 @@ function taskLogRows(): Array<{ text: string }> {
 }
 
 describe('task-run turn wiring (real processQuery)', () => {
+  it('does not acknowledge success when result logging fails', async () => {
+    insertMessage('t1', 'task', { prompt: 'Prepare the brief' });
+    const { query } = makeResultQuery({ type: 'result', text: 'Brief prepared' });
+    const write = spyOn(getAgentMailbox().operations, 'writeMessageOut').mockImplementation(() => {
+      throw new Error('Mailbox unavailable');
+    });
+    try {
+      await expect(processQuery(query, TASK_ROUTING, ['t1'], 'claude', undefined, 'prompt', undefined))
+        .rejects.toThrow('Mailbox unavailable');
+      expect(getOutboundDb().prepare('SELECT status FROM processing_ack WHERE message_id = ?').get('t1'))
+        .toEqual({ status: 'failed' });
+    } finally {
+      write.mockRestore();
+    }
+  });
+  it('records provider errors as failures without a corrective retry', async () => {
+    insertMessage('t1', 'task', { prompt: 'Prepare the brief' });
+    const { query, pushes } = makeResultQuery({ type: 'result', text: 'Authentication failed', isError: true });
+    await processQuery(query, TASK_ROUTING, ['t1'], 'claude', undefined, 'prompt', undefined);
+    expect(getOutboundDb().prepare('SELECT status FROM processing_ack WHERE message_id = ?').get('t1'))
+      .toEqual({ status: 'failed' });
+    expect(pushes).toHaveLength(0);
+  });
+
+  it('marks an unfinished task failed if the provider stream closes or throws', async () => {
+    for (const throws of [false, true]) {
+      const id = `unfinished-${throws}`;
+      insertMessage(id, 'task', { prompt: 'Prepare the brief' });
+      async function* events(): AsyncGenerator<ProviderEvent> {
+        yield { type: 'activity' };
+        if (throws) throw new Error('Connection closed');
+      }
+      const query: AgentQuery = { push: () => {}, end: () => {}, events: events(), abort: () => {} };
+      await processQuery(query, TASK_ROUTING, [id], 'claude', undefined, 'prompt', undefined).catch(() => {});
+      expect(getOutboundDb().prepare('SELECT status FROM processing_ack WHERE message_id = ?').get(id))
+        .toEqual({ status: 'failed' });
+    }
+  });
+
   it('auto-appends the final text as a task_log row', async () => {
     async function* events(): AsyncGenerator<ProviderEvent> {
       yield { type: 'init', continuation: 's1' };

@@ -50,5 +50,4 @@ Confirm the resulting state. Do not alter the host monitor implementation, servi
 Credentials, OAuth, mounts, channel permissions, Docker, systemd, firewall,
 backups, Git operations, provider changes, service restarts, destructive writes,
 and new external recipients always require explicit owner approval of the exact
-scope. If the requested action is outside this skill's user-level boundary,
-explain the required approval instead of attempting a host shell workaround.
+scope. For small capability source changes, use assistant-operations host-source-read → host-change-stage → host-change-apply. Prepare and test the concrete diff before requesting native Telegram approval; activation performs the supervised restart. Other host changes need a concrete maintainer handoff. Never attempt a host shell workaround.

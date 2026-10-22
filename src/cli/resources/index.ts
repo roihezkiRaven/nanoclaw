@@ -16,3 +16,4 @@ import './approvals.js';
 import './sessions.js';
 import './tasks.js';
 import './agy.js';
+import './host-changes.js';

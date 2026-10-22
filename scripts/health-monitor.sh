@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=/home/assistant/nanoclaw
-group_id=ag-2a8d9d8e-dec3-4a12-9a27-ebcf4945661a
+group_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["group_id"])' "$root/config/report-watchdog.json")
 disabled="$root/groups/personal-assistant/health-monitor.disabled"
 state_dir="$root/data/health-monitor"
 state_file="$state_dir/last-alert"
@@ -13,6 +13,7 @@ if [[ -e "$disabled" ]]; then
 fi
 
 issues=()
+python3 "$root/scripts/report-watchdog.py" >/dev/null || issues+=(report-delivery-monitor)
 systemctl is-active --quiet docker || issues+=(docker)
 systemctl --user is-active --quiet nanoclaw-v2-fc17183a.service || issues+=(nanoclaw)
 systemctl --user is-active --quiet gdrive-broker.service || issues+=(gdrive-broker)
@@ -46,7 +47,7 @@ printf '%s' "$summary" >"$state_file"
 if [[ ",$summary," == *,nanoclaw,* ]]; then
   systemctl --user restart nanoclaw-v2-fc17183a.service || true
 fi
-if [[ ",$summary," == *,gdrive-broker,* || ",$summary," == *,drive-reader,* || ",$summary," == *,drive-writer,* || ",$summary," == *,google-calendar,* ]]; then
+if [[ ",$summary," == *,gdrive-broker,* ]]; then
   systemctl --user restart gdrive-broker.service || true
 fi
 if [[ ",$summary," == *,whatsapp-collector,* ]]; then
