@@ -20,7 +20,7 @@ vi.mock('../approvals/index.js', () => ({
   requestApproval: capture.approve,
   registerApprovalHandler: vi.fn(),
 }));
-vi.mock('../../log.js', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('../../log.js', () => ({ log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 import './index.js';
 const session = { id: 'test', agent_group_id: 'pa' } as Session;
 const payload = { action: 'assistant_mail_send', to: 'owner@example.com', subject: 'Trial', text: 'Exact message.' };
