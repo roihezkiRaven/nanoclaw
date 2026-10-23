@@ -2,6 +2,7 @@
 """Mirror the local personal knowledge wiki into its dedicated Drive folder."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -34,9 +35,17 @@ def child_folder(drive, parent_id: str, name: str) -> str:
 def load_state(path: Path) -> dict[str, str]:
     try:
         value = json.loads(path.read_text())
-        return value if isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()) else {}
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return {}
+    if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+        raise ValueError(f"invalid sync state: {path}")
+    return value
+
+
+def save_state(path: Path, state: dict[str, str]) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\n")
+    temporary.replace(path)
 
 
 def main() -> None:
@@ -52,7 +61,7 @@ def main() -> None:
         raise SystemExit("source must be a directory")
 
     drive = service("writer", authorize=False)
-    target = writer_parent(drive, args.drive_folder)
+    target = writer_parent(service("reader", authorize=False), args.drive_folder)
     state_path = args.state_file or root / ".drive-sync.json"
     state = load_state(state_path)
     folders = {Path("."): target}
@@ -66,7 +75,10 @@ def main() -> None:
         media = MediaFileUpload(str(file_path), mimetype="text/markdown", resumable=False)
         body = {"name": relative.name, "parents": [folders[parent]], "mimeType": "text/markdown"}
         if relative.as_posix() in state:
-            current = drive.files().get(fileId=state[relative.as_posix()], fields="parents").execute().get("parents", [])
+            metadata = drive.files().get(fileId=state[relative.as_posix()], fields="parents,md5Checksum").execute()
+            current = metadata.get("parents", [])
+            if folders[parent] in current and metadata.get("md5Checksum") == hashlib.md5(file_path.read_bytes()).hexdigest():
+                continue
             drive.files().update(
                 fileId=state[relative.as_posix()], body={"name": relative.name}, media_body=media,
                 addParents=folders[parent] if folders[parent] not in current else None,
@@ -74,9 +86,8 @@ def main() -> None:
             ).execute()
         else:
             state[relative.as_posix()] = drive.files().create(body=body, media_body=media, fields="id").execute()["id"]
-    temporary = state_path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, sort_keys=True) + "\n")
-    temporary.replace(state_path)
+        save_state(state_path, state)
+    save_state(state_path, state)
     print(json.dumps({"synced": len(state)}))
 
 

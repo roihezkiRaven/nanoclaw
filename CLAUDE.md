@@ -19,6 +19,12 @@ Personal AI assistant. See [README.md](README.md) for philosophy and setup. Arch
 
 ## Quick Context
 
+For owner-authorized implementation work, commit and push the reviewed changes
+before calling the work complete. Include the tests and deployment templates
+needed to reproduce the change. Keep credentials, private knowledge, runtime
+state, working notes and backups out of Git; scan staged files before pushing.
+Reconcile workstation and server source changes so neither copy is lost.
+
 The host is a single Node process that orchestrates per-session agent containers. Platform messages land via channel adapters, route through an entity model (users → messaging groups → agent groups → sessions), get written into the session's inbound DB, and wake a container. The agent-runner inside the container polls the DB, calls the agent, and writes back to the outbound DB. The host polls the outbound DB and delivers through the same adapter.
 
 **Everything is a message.** There is no IPC, no file watcher, no stdin piping between host and container. The two session DBs are the sole IO surface.

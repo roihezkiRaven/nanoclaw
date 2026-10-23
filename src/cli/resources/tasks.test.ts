@@ -37,6 +37,7 @@ import { formatTasksTable } from '../format-tasks.js';
 import type { CallerContext } from '../frame.js';
 import { getAgentMailbox } from '../../mailbox/index.js';
 import './tasks.js';
+import { killContainer } from '../../container-runner.js';
 import '../commands/index.js'; // registers tasks-help for the help-topic test
 
 function now(): string {
@@ -67,6 +68,18 @@ function agentCtx(group = 'ag-1', session = 'chat-1'): CallerContext {
 }
 
 describe('tasks CLI resource', () => {
+  it.each([false, true])('cancel stops only the dedicated worker (all=%s)', async (all) => {
+    vi.mocked(killContainer).mockClear();
+    const c = await dispatch(
+      { id: 'c', command: 'tasks-create', args: { prompt: 'x', process_after: now() } },
+      agentCtx(),
+    );
+    if (!c.ok) throw new Error('create failed');
+    const data = c.data as { series_id: string; session_id: string };
+    const r = await dispatch({ id: 'x', command: 'tasks-cancel', args: { id: data.series_id, all } }, agentCtx());
+    expect(r.ok).toBe(true);
+    expect(killContainer).toHaveBeenCalledExactlyOnceWith(data.session_id, 'task-cancelled');
+  });
   beforeEach(async () => {
     if (fs.existsSync(TEST_DIR)) fs.rmSync(TEST_DIR, { recursive: true });
     fs.mkdirSync(TEST_DIR, { recursive: true });
@@ -81,6 +94,28 @@ describe('tasks CLI resource', () => {
   afterEach(async () => {
     await closeDb();
     if (fs.existsSync(TEST_DIR)) fs.rmSync(TEST_DIR, { recursive: true });
+  });
+
+  it('persists a per-task Jerusalem timezone and recomputes the next run on update', async () => {
+    const created = await dispatch(
+      { id: 'z', command: 'tasks-create', args: { prompt: 'x', recurrence: '0 20 * * *', timezone: 'Asia/Jerusalem' } },
+      agentCtx(),
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const id = (created.data as any).series_id;
+    expect(created.data).toMatchObject({ timezone: 'Asia/Jerusalem' });
+    expect(formatTasksTable([{ series_id: id, schedule: '0 20 * * *', timezone: 'Asia/Jerusalem' }])).toContain(
+      '[Asia/Jerusalem]',
+    );
+    expect((await dispatch({ id: 'u', command: 'tasks-update', args: { id, timezone: 'UTC' } }, agentCtx())).ok).toBe(
+      true,
+    );
+    const after = await dispatch({ id: 'g', command: 'tasks-get', args: { id } }, agentCtx());
+    expect(after.ok && after.data).toMatchObject({ timezone: 'UTC' });
+    expect(
+      (await dispatch({ id: 'bad', command: 'tasks-update', args: { id, timezone: 'Bad/Zone' } }, agentCtx())).ok,
+    ).toBe(false);
   });
 
   it('create writes the task into the group system session, not the caller chat session', async () => {

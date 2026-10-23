@@ -394,9 +394,13 @@ async function testCombinedProviders(skills: RegistrySkill[]): Promise<void> {
     git(['update-ref', 'refs/heads/providers', refs.providers], root);
     git(['remote', 'remove', 'origin'], root);
     git(['remote', 'add', 'skill-ci', '.'], root);
-    const report = await refreshInstalledSkills(root, 'all', {
-      exec: (cmd, cwd) => command(cmd, cwd),
-    });
+    const report = await refreshInstalledSkills(
+      root,
+      selected.map(({ skill }) => skill),
+      {
+        exec: (cmd, cwd) => command(cmd, cwd),
+      },
+    );
     const expected = selected.map(({ provider }) => provider).sort();
     if (JSON.stringify(report.selected) !== JSON.stringify(expected)) {
       throw new Error(`update-skills detected ${report.selected.join(', ') || 'no providers'}`);
@@ -486,6 +490,21 @@ async function testPreContractProviders(): Promise<void> {
     git(['checkout', '--quiet', '--detach', git(['rev-parse', 'HEAD'])], root);
     command('pnpm install --frozen-lockfile --prefer-offline', root);
     command('bun install --frozen-lockfile', join(root, 'container/agent-runner'));
+
+    // Installed fork providers must not leave new contracts paired with legacy payloads.
+    for (const directory of ['src/provider-contracts', 'container/agent-runner/src/provider-contracts']) {
+      const barrel = join(root, directory, 'index.ts');
+      let source = readFileSync(barrel, 'utf8');
+      for (const provider of ['codex', 'opencode']) {
+        rmSync(join(root, directory, `${provider}.ts`), { force: true });
+        const implementations = directory.replace('provider-contracts', 'providers');
+        for (const suffix of ['.conformance.test.ts', '-contract-parity.test.ts']) {
+          rmSync(join(root, implementations, `${provider}${suffix}`), { force: true });
+        }
+        source = source.replace(new RegExp(`^import ['"]\\./${provider}\\.js['"];?\\r?\\n`, 'gm'), '');
+      }
+      writeFileSync(barrel, source);
+    }
 
     const refs = { providers: PRE_CONTRACT_PROVIDERS_SHA };
     for (const name of LEGACY_PROVIDER_SKILLS) {

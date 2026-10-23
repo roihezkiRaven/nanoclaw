@@ -23,7 +23,8 @@
  */
 import { normalizeOptions, type RawOption } from '../../channels/ask-question.js';
 import { getMessagingGroup } from '../../db/messaging-groups.js';
-import { createPendingApproval, deletePendingApproval, getSession } from '../../db/sessions.js';
+import { createPendingApproval, getPendingApproval, getSession } from '../../db/sessions.js';
+import { getDb } from '../../db/connection.js';
 import { getDeliveryAdapter } from '../../delivery.js';
 import { requestWake } from '../../request-wake.js';
 import { log } from '../../log.js';
@@ -226,13 +227,15 @@ export interface RequestApprovalOptions {
  * caller's perspective — the admin's response kicks off the registered
  * approval handler for this action via the response dispatcher.
  */
-export async function requestApproval(opts: RequestApprovalOptions): Promise<void> {
+export async function requestApproval(
+  opts: RequestApprovalOptions,
+): Promise<{ approval_id?: string; delivery: string }> {
   const { session, action, payload, title, question, agentName, approverUserId } = opts;
 
   const approvers = approverUserId ? [approverUserId] : await pickApprover(session.agent_group_id);
   if (approvers.length === 0) {
     await notifyAgent(session, `${action} failed: no owner or admin configured to approve.`);
-    return;
+    return { delivery: 'unavailable' };
   }
 
   const origin = session.messaging_group_id ? await getMessagingGroup(session.messaging_group_id) : undefined;
@@ -241,7 +244,7 @@ export async function requestApproval(opts: RequestApprovalOptions): Promise<voi
   const target = await pickApprovalDelivery(approvers, originChannelType, origin?.instance);
   if (!target) {
     await notifyAgent(session, `${action} failed: no DM channel found for any eligible approver.`);
-    return;
+    return { delivery: 'unavailable' };
   }
 
   const approvalId = `appr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -249,6 +252,7 @@ export async function requestApproval(opts: RequestApprovalOptions): Promise<voi
   await createPendingApproval({
     approval_id: approvalId,
     session_id: session.id,
+    agent_group_id: session.agent_group_id,
     request_id: approvalId,
     action,
     payload: JSON.stringify(payload),
@@ -264,33 +268,66 @@ export async function requestApproval(opts: RequestApprovalOptions): Promise<voi
     approver_user_id: approverUserId ?? target.userId ?? null,
   });
 
+  const delivery = await retryApprovalDelivery(approvalId);
+  if (['failed', 'unavailable'].includes(delivery))
+    await notifyAgent(
+      session,
+      `${action} failed: could not deliver approval request (${delivery}); ${approvalId} retained for retry; action has not run.`,
+    );
+  log.info('Approval requested', { action, approvalId, agentName, approver: target.userId, delivery });
+  return { approval_id: approvalId, delivery };
+}
+
+const deliveringCards = new Set<string>();
+
+/** Retry the same decision ID; successful delivery is never duplicated. */
+export async function retryApprovalDelivery(id: string): Promise<string> {
+  if (deliveringCards.has(id)) return 'in_progress';
+  deliveringCards.add(id);
+  try {
+    return await deliverApprovalCard(id);
+  } finally {
+    deliveringCards.delete(id);
+  }
+}
+
+async function deliverApprovalCard(id: string): Promise<string> {
+  const row = await getPendingApproval(id);
+  if (!row || row.status !== 'pending') throw new Error('Approval is no longer pending');
+  const payload = JSON.parse(row.payload);
+  if (payload.delivery?.status === 'delivered' && row.platform_message_id) return 'delivered';
   const adapter = getDeliveryAdapter();
-  if (adapter) {
+  let status = 'unavailable';
+  let messageId: string | undefined;
+  if (adapter && row.channel_type && row.platform_id) {
     try {
-      await adapter.deliver(
-        target.messagingGroup.channel_type,
-        target.messagingGroup.platform_id,
+      messageId = await adapter.deliver(
+        row.channel_type,
+        row.platform_id,
         null,
         'chat-sdk',
         JSON.stringify({
           type: 'ask_question',
-          questionId: approvalId,
-          title,
-          question,
-          options: APPROVAL_OPTIONS,
+          questionId: id,
+          title: row.title,
+          question: row.question,
+          options: JSON.parse(row.options_json),
         }),
         undefined,
-        target.messagingGroup.instance,
+        row.instance ?? undefined,
       );
-    } catch (err) {
-      log.error('Failed to deliver approval card', { action, approvalId, err });
-      // The single delivery target never saw the card — remove the row so it
-      // can't linger as a pending approval nobody can act on.
-      await deletePendingApproval(approvalId);
-      await notifyAgent(session, `${action} failed: could not deliver approval request to ${target.userId}.`);
-      return;
+      status = messageId ? 'delivered' : 'unverified';
+    } catch {
+      status = 'failed';
     }
   }
-
-  log.info('Approval requested', { action, approvalId, agentName, approver: target.userId });
+  payload.delivery = { status, checked_at: new Date().toISOString() };
+  await getDb().run(
+    'UPDATE pending_approvals SET payload = ?, platform_message_id = ? WHERE approval_id = ? AND status = ?',
+    JSON.stringify(payload),
+    messageId ?? null,
+    id,
+    'pending',
+  );
+  return status;
 }

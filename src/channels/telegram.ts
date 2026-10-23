@@ -31,7 +31,7 @@ import { createChatSdkBridge, type ReplyContext } from './chat-sdk-bridge.js';
 import { registerChannelAdapter } from './channel-registry.js';
 import type { ChannelAdapter, ChannelDefaults, ChannelSetup, InboundMessage } from './adapter.js';
 import { tryConsume } from './telegram-pairing.js';
-import { formatModelCatalog } from '../model-catalog.js';
+import { formatModelCatalog, getCodexModels } from '../model-catalog.js';
 
 /**
  * Dedicated bot identity, non-threaded platform (supportsThreads:false), so
@@ -100,6 +100,15 @@ async function registerTelegramCommands(token: string): Promise<void> {
           { command: 'models', description: 'List available assistant and Antigravity models' },
           { command: 'model', description: 'Set model: /model <name|default>' },
           { command: 'effort', description: 'Set reasoning: /effort <level|default>' },
+          { command: 'work', description: 'Priorities, deliverables, and next actions' },
+          { command: 'projects', description: 'Own and advance a project' },
+          { command: 'meetings', description: 'Prepare meetings and follow-up drafts' },
+          { command: 'research', description: 'Research and test a tool or idea' },
+          { command: 'improve', description: 'Build, test, promote, or roll back a capability' },
+          { command: 'refine', description: 'Change assistant preferences and routines' },
+          { command: 'mail', description: 'Check the agent inbox or draft an email' },
+          { command: 'connect', description: 'Prepare or continue an approved provider signup' },
+          { command: 'memory', description: 'Inspect, refresh, or forget saved memory' },
           { command: 'connect_group', description: 'Connect the bot to a Telegram group' },
         ],
       }),
@@ -158,7 +167,7 @@ type TelegramControlCommand =
 const VALID_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 const execFileAsync = promisify(execFile);
 const CODEX_RATE_LIMIT_COMMAND =
-  '(printf \'%s\\n%s\\n\' \'{"id":1,"method":"initialize","params":{"clientInfo":{"name":"nanoclaw-usage","version":"1.0"}}}\' \'{"id":2,"method":"account/rateLimits/read","params":null}\'; sleep 8) | timeout 12 codex app-server --stdio 2>/dev/null';
+  '(printf \'%s\\n%s\\n\' \'{"id":1,"method":"initialize","params":{"clientInfo":{"name":"nanoclaw-usage","version":"1.0"}}}\' \'{"id":2,"method":"account/rateLimits/read","params":null}\'; sleep 8) | timeout 12 codex app-server --listen stdio:// 2>/dev/null';
 
 interface CodexRateLimitWindow {
   usedPercent: number;
@@ -265,7 +274,9 @@ async function handleControlCommand(
     return true;
   }
   if (command.name === 'models') {
-    await sendTelegramMessage(token, platformId, { text: formatModelCatalog(config.model) });
+    await sendTelegramMessage(token, platformId, {
+      text: formatModelCatalog(config.model, getCodexModels(agentGroupId)),
+    });
     return true;
   }
   if (command.name === 'model') {
@@ -444,11 +455,11 @@ export function createTelegramInboundInterceptor(
 
     try {
       if (!botUsername) {
-        hostOnInbound(platformId, threadId, message);
+        await hostOnInbound(platformId, threadId, message);
         return;
       }
       if (!text) {
-        hostOnInbound(platformId, threadId, message);
+        await hostOnInbound(platformId, threadId, message);
         return;
       }
       const consumed = await tryConsume({
@@ -460,7 +471,7 @@ export function createTelegramInboundInterceptor(
         instance: instanceKey,
       });
       if (!consumed) {
-        hostOnInbound(platformId, threadId, message);
+        await hostOnInbound(platformId, threadId, message);
         return;
       }
       // Pairing matched — record the chat and short-circuit so the
@@ -520,7 +531,7 @@ export function createTelegramInboundInterceptor(
     } catch (err) {
       log.error('Telegram pairing interceptor error', { err });
       // Fail open: pass through so a pairing bug doesn't break normal traffic.
-      hostOnInbound(platformId, threadId, message);
+      await hostOnInbound(platformId, threadId, message);
     }
   };
 }

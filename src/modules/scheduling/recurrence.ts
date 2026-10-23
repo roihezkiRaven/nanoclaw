@@ -20,6 +20,8 @@ import { log } from '../../log.js';
 import type { Session } from '../../types.js';
 import type { InboundMailbox } from '../../mailbox/index.js';
 import { appendRunLog } from './run-log.js';
+import { taskSessionCancelled } from './cancellation.js';
+import { parseTaskContent } from './task-content.js';
 
 // Consecutive pre-task-script failures (the series' trailing FAILED runs —
 // derived from occurrence rows, no stored counter) throttle a broken monitor
@@ -57,11 +59,15 @@ export async function handleRecurrence(inDb: InboundMailbox, session: Session): 
 
   for (const msg of recurring) {
     try {
+      if (taskSessionCancelled(session.id)) {
+        inDb.clearRecurrence(msg.id);
+        continue;
+      }
       // Interpret the cron expression in the user's timezone. v1 did this
       // (src/v1/task-scheduler.ts:20-49); without it, a task written "0 9 * * *"
       // by an agent running in a user's local TZ fires at 09:00 UTC instead of
       // 09:00 user-local.
-      const interval = CronExpressionParser.parse(msg.recurrence, { tz });
+      const interval = CronExpressionParser.parse(msg.recurrence, { tz: parseTaskContent(msg.content).timezone ?? tz });
       const cronNext = interval.next().toDate();
       const newId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 

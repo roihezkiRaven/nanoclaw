@@ -17,6 +17,7 @@ import {
 } from './gateway-provider-registry.js';
 
 import { combinedCaBundle, stageOnecliFile } from './onecli-files.js';
+import { repairCodexStub } from './codex-stub.js';
 
 const onecli = new OneCLI({ url: ONECLI_URL, apiKey: ONECLI_API_KEY });
 
@@ -42,7 +43,11 @@ function contributionFromConfig(config: ContainerConfig, groupScope: string): Ga
     env.DENO_CERT = containerPath;
   }
   for (const stub of config.credentialStubs ?? []) {
-    mount('stub', stub.content, stub.containerPath);
+    // ponytail: local identity metadata until OneCLI ships onecli/onecli#578.
+    const content = stub.containerPath.endsWith('/.codex/auth.json')
+      ? repairCodexStub(DATA_DIR, groupScope, stub.content)
+      : stub.content;
+    mount('stub', content, stub.containerPath);
   }
   return { env, mounts };
 }

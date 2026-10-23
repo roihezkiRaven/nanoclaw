@@ -109,6 +109,7 @@ function runCli(
   const child = spawn(
     process.execPath,
     [
+      '--no-warnings',
       '--import',
       import.meta.resolve('tsx'),
       clientPath,

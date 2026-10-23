@@ -16,22 +16,7 @@ MAX_BYTES = 1_000_000
 MAX_TREE_ITEMS = 5000
 
 
-def writer_parent(api, requested_parent):
-    root = drive.env_value("GOOGLE_WRITER_FOLDER_ID")
-    if not root:
-        raise ValueError("writer folder is not configured")
-    current = str(requested_parent or root)
-    for _ in range(10):
-        if current == root:
-            return current
-        meta = api.files().get(fileId=current, fields="mimeType,parents", supportsAllDrives=True).execute()
-        if meta.get("mimeType") != "application/vnd.google-apps.folder":
-            raise ValueError("parent_id must be a folder inside the writer folder")
-        parents = meta.get("parents") or []
-        if len(parents) != 1:
-            break
-        current = parents[0]
-    raise ValueError("parent_id is outside the writer folder")
+writer_parent = drive.writer_parent
 
 
 def folder_tree(api, root_id, max_depth, max_items):
@@ -65,6 +50,32 @@ def folder_tree(api, root_id, max_depth, max_items):
     return {"ok": True, "files": files, "truncated": bool(queue) or len(files) == max_items}
 
 
+def page_token(body):
+    token = body.get("page_token")
+    if token is not None and (not isinstance(token, str) or not token or len(token) > 4096):
+        raise ValueError("page_token must be a nonempty string up to 4096 characters")
+    return token
+
+
+def read_chunk(data, meta, body):
+    offset = body.get("offset", 0)
+    limit = body.get("limit_bytes", MAX_BYTES)
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 4 <= limit <= MAX_BYTES:
+        raise ValueError("offset must be nonnegative; limit_bytes must be 4..1000000")
+    version = str(meta.get("version") or meta.get("modifiedTime") or "")
+    if (offset and not body.get("version")) or (body.get("version") is not None and body["version"] != version):
+        raise ValueError("continuation requires the unchanged version from the previous read")
+    text = data.decode("utf-8", "replace")
+    if offset > len(text):
+        raise ValueError("offset exceeds content length")
+    chunk = text[offset:].encode("utf-8")[:limit].decode("utf-8", "ignore")
+    end = offset + len(chunk)
+    return {"ok": True, "name": meta["name"], "text": chunk, "version": version,
+            "offset": offset, "offset_unit": "unicode_characters", "total_bytes": len(data),
+            "returned_bytes": len(chunk.encode("utf-8")), "truncated": end < len(text),
+            "complete": end == len(text), "next_offset": end if end < len(text) else None}
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
@@ -88,17 +99,18 @@ class Handler(BaseHTTPRequestHandler):
                 q=f"trashed = false and (name contains '{escaped}' or fullText contains '{escaped}')",
                 pageSize=min(max(int(body.get("limit", 10)), 1), 50),
                 orderBy="modifiedTime desc",
-                fields="files(id,name,mimeType,modifiedTime,webViewLink,size)",
+                pageToken=page_token(body),
+                fields="nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,size)",
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
-            ).execute().get("files", [])
-            return {"ok": True, "files": files}
+            ).execute()
+            return {"ok": True, "files": files.get("files", []), "next_page_token": files.get("nextPageToken"), "complete": not bool(files.get("nextPageToken"))}
         if action == "read":
             file_id = str(body.get("file_id", "")).strip()
             if not file_id:
                 raise ValueError("file_id is required")
             api = drive.service("reader", False)
-            meta = api.files().get(fileId=file_id, fields="name,mimeType", supportsAllDrives=True).execute()
+            meta = api.files().get(fileId=file_id, fields="name,mimeType,version,modifiedTime", supportsAllDrives=True).execute()
             if meta["mimeType"] == "application/vnd.google-apps.document":
                 data = api.files().export_media(fileId=file_id, mimeType="text/plain").execute()
             elif meta["mimeType"] == "application/vnd.google-apps.spreadsheet":
@@ -107,7 +119,10 @@ class Handler(BaseHTTPRequestHandler):
                 data = api.files().get_media(fileId=file_id).execute()
             else:
                 raise ValueError("unsupported MIME type: " + meta["mimeType"])
-            return {"ok": True, "name": meta["name"], "text": data[:MAX_BYTES].decode("utf-8", "replace")}
+            current = api.files().get(fileId=file_id, fields="name,mimeType,version,modifiedTime", supportsAllDrives=True).execute()
+            if current != meta:
+                raise ValueError("file changed during read; restart from offset zero")
+            return read_chunk(data, meta, body)
         if action == "list":
             folder_id = str(body.get("folder_id", "")).strip()
             if not re.fullmatch(r"[A-Za-z0-9_-]{10,100}", folder_id):
@@ -116,11 +131,12 @@ class Handler(BaseHTTPRequestHandler):
                 q=f"trashed = false and '{folder_id}' in parents",
                 pageSize=min(max(int(body.get("limit", 50)), 1), 50),
                 orderBy="folder,name",
-                fields="files(id,name,mimeType,modifiedTime,webViewLink,size)",
+                pageToken=page_token(body),
+                fields="nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,size)",
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
-            ).execute().get("files", [])
-            return {"ok": True, "files": files}
+            ).execute()
+            return {"ok": True, "files": files.get("files", []), "next_page_token": files.get("nextPageToken"), "complete": not bool(files.get("nextPageToken"))}
         if action == "tree":
             return folder_tree(
                 drive.service("reader", False),
@@ -133,27 +149,27 @@ class Handler(BaseHTTPRequestHandler):
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
                 raise ValueError("name must be a simple filename")
             api = drive.service("writer", False)
-            folder_id = writer_parent(api, body.get("parent_id"))
+            folder_id = writer_parent(drive.service("reader", False), body.get("parent_id"))
             media = MediaIoBaseUpload(io.BytesIO(str(body.get("text", "")).encode()), mimetype="text/plain", resumable=False)
             file = api.files().create(
                 body={"name": name, "parents": [folder_id], "mimeType": "text/plain"},
                 media_body=media,
-                fields="id,name,webViewLink",
+                fields="id,name,webViewLink,parents",
                 supportsAllDrives=True,
             ).execute()
-            return {"ok": True, "file": file}
+            return {"ok": True, "file": drive.verify_created_parent(api, file, folder_id)}
         if action == "mkdir":
             name = str(body.get("name", ""))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,120}", name):
                 raise ValueError("name must be a simple folder name")
             api = drive.service("writer", False)
-            folder_id = writer_parent(api, body.get("parent_id"))
+            folder_id = writer_parent(drive.service("reader", False), body.get("parent_id"))
             folder = api.files().create(
                 body={"name": name, "parents": [folder_id], "mimeType": "application/vnd.google-apps.folder"},
-                fields="id,name,webViewLink",
+                fields="id,name,webViewLink,parents",
                 supportsAllDrives=True,
             ).execute()
-            return {"ok": True, "folder": folder}
+            return {"ok": True, "folder": drive.verify_created_parent(api, folder, folder_id)}
         if action == "calendar":
             now = datetime.now(timezone.utc)
             time_min = str(body.get("start") or now.isoformat().replace("+00:00", "Z"))
@@ -170,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
                     maxResults=limit,
                     singleEvents=True,
                     orderBy="startTime",
-                    fields="items(id,summary,start,end,location,htmlLink,status)",
+                    fields="items(id,summary,start,end,location,htmlLink,status,attendees(self,responseStatus))",
                 ).execute()
                 for event in result.get("items", []):
                     event["calendar"] = {"id": calendar["id"], "summary": calendar.get("summary"), "primary": calendar.get("primary", False)}

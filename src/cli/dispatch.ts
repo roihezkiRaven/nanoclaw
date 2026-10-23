@@ -1,3 +1,4 @@
+import { taskSessionCancelled } from '../modules/scheduling/cancellation.js';
 /**
  * Transport-agnostic dispatcher. Both the socket server (host caller) and
  * the per-session DB poller (container caller) call dispatch() with the
@@ -115,6 +116,8 @@ export async function dispatch(
     }
   }
 
+  if (ctx.caller === 'agent' && taskSessionCancelled(ctx.sessionId))
+    return err(req.id, 'forbidden', 'Task session has been cancelled; action has not run');
   const decision = await guard(commandGuard(cmd.name), {
     actor: actorFor(ctx),
     payload: req.args,
@@ -153,7 +156,7 @@ export async function dispatch(
       .map(([k, v]) => `--${k} ${v}`)
       .join(' ');
 
-    await requestApproval({
+    const approval = await requestApproval({
       session,
       agentName,
       action: 'cli_command',
@@ -162,7 +165,17 @@ export async function dispatch(
       question: `Agent "${agentName}" wants to run:\n\`ncl ${req.command}${argSummary ? ' ' + argSummary : ''}\``,
     });
 
-    return err(req.id, 'approval-pending', 'Approval request sent to admin. You will be notified of the result.');
+    if (approval && ['failed', 'unavailable'].includes(approval.delivery))
+      return err(
+        req.id,
+        'handler-error',
+        `Approval ${approval.approval_id ?? 'not created'}: ${approval.delivery}; action has not run.`,
+      );
+    return err(
+      req.id,
+      'approval-pending',
+      `Approval ${approval?.approval_id ?? 'queued'} pending; card delivery: ${approval?.delivery ?? 'unverified'}. Action has not run.`,
+    );
   }
 
   let parsed: unknown;
