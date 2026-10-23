@@ -309,3 +309,16 @@ For owner-requested repairs, the bounded maintenance workflow supports integrati
 Tasks accept an explicit IANA timezone in their content envelope; existing tasks without one retain the group default. `tasks update --timezone` recomputes the next cron occurrence unless process_after is explicitly supplied. Cancellation persists a host-owned session marker, blocks rearming and queued delivery/CLI actions, and aborts active AGY requests. Already sent or in-flight external effects cannot be rolled back.
 
 `agy-models` reads the authenticated account catalog. Explicit model IDs are checked before downloading or preprocessing video; unavailable IDs fail without selecting a replacement. On October 18 the live catalog listed Argon high/medium/low; that confirms entitlement discovery, not successful video inference.
+
+## Knowledge publication validation
+
+Each publication service validates only its own knowledge base (`--scope timeless`
+or `--scope whatsapp`), while the health monitor retains full-wiki validation.
+A defect in one knowledge base cannot block publication of the other; each still
+rejects broken links, missing metadata and cross-boundary references.
+
+Both brain groups require the `python3` apt package in their group configuration,
+with a group image rebuild after installation. Deploy the canonical
+`scripts/validate-knowledge-wiki.py` to each group's ignored
+`knowledge-validator.py` whenever the validator changes. Maintainers run it via
+`/workspace/agent/knowledge-validator.py` before reporting success.

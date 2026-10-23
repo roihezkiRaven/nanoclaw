@@ -43,3 +43,5 @@ Resolve every relative link from the containing file's directory. Weekly pages a
 Exclude `coverage-status` pages from learning evidence; historical no-record checks do not establish facts about a group or the current archive.
 
 Preserve every existing weekly snapshot when rebuilding the current week; never clear or replace the weekly directory. Keep historical snapshots linked from the brain index.
+
+Before reporting completion, run `python3 /workspace/agent/knowledge-validator.py /workspace/extra/timeless-wiki --scope whatsapp` and fix every error. Top-level metadata keys such as `title` must start at column one. Links from `brain/weekly/` to group digests use `../../<group>/<date>.md`, not `../<group>/<date>.md`. If the validator is unavailable or fails, report the exact validation gap instead of claiming a successful rebuild.

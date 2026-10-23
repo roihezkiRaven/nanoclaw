@@ -62,12 +62,19 @@ def project_checkpoint_errors(root: Path, source_id: str, item: dict) -> list[st
             if (error := project_output_error(root, source_id, item, path))]
 
 
-def validate(root: Path) -> list[str]:
+def in_scope(relative: Path, scope: str) -> bool:
+    whatsapp = relative.parts[0] in {"whatsapp", "whatsapp-ingestion.json"}
+    return scope == "all" or whatsapp == (scope == "whatsapp")
+
+
+def validate(root: Path, scope: str = "all") -> list[str]:
     errors: list[str] = []
     for path in sorted(root.rglob("*.md")):
+        relative = path.relative_to(root)
+        if not in_scope(relative, scope):
+            continue
         text = path.read_text(encoding="utf-8")
         meta = frontmatter(text)
-        relative = path.relative_to(root)
         is_log_or_root_index = (
             relative.as_posix() in {"index.md", "log.md", "whatsapp/log.md", "whatsapp/coverage.md"}
             or (len(relative.parts) == 3 and relative.parts[0] == "whatsapp" and relative.name == "index.md")
@@ -112,6 +119,8 @@ def validate(root: Path) -> list[str]:
             elif not resolved.exists():
                 errors.append(f"{relative}: broken link: {target}")
     for checkpoint in root.rglob("*ingestion*.json"):
+        if not in_scope(checkpoint.relative_to(root), scope):
+            continue
         try:
             data = json.loads(checkpoint.read_text(encoding="utf-8"))
             entries = data.get("files", data.get("sources")) if isinstance(data, dict) else None
@@ -121,6 +130,9 @@ def validate(root: Path) -> list[str]:
             ):
                 raise ValueError("expected a source map with observed modification times")
             for source_id, item in entries.items():
+                if in_scope(checkpoint.relative_to(root), "whatsapp") and item.get("project_outputs"):
+                    errors.append(f"{checkpoint.relative_to(root)}: WhatsApp checkpoint cannot claim Timeless project outputs")
+                    continue
                 errors.extend(f"{checkpoint.relative_to(root)}: {message}" for message in project_checkpoint_errors(root, source_id, item))
         except (OSError, ValueError) as exc:
             errors.append(f"{checkpoint.relative_to(root)}: invalid checkpoint: {exc}")
@@ -130,14 +142,15 @@ def validate(root: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path, help="knowledge wiki directory")
+    parser.add_argument("--scope", choices=("all", "timeless", "whatsapp"), default="all")
     args = parser.parse_args()
     if not args.root.is_dir():
         parser.error(f"not a directory: {args.root}")
-    errors = validate(args.root)
+    errors = validate(args.root, args.scope)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"OK: {len(list(args.root.rglob('*.md')))} Markdown pages validated")
+    print(f"OK: {sum(in_scope(p.relative_to(args.root), args.scope) for p in args.root.rglob('*.md'))} Markdown pages validated")
     return 0
 
 

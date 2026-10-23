@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("validator", Path(__file__).with_name("validate-knowledge-wiki.py"))
@@ -100,6 +101,32 @@ class KnowledgeValidationTest(unittest.TestCase):
     def test_project_checkpoint_rejects_malformed_lists(self):
         self.project_checkpoint("projects/client.md")
         self.assertTrue(any("project_outputs must be a list" in e for e in validator.validate(self.root)))
+
+    def test_invalid_whatsapp_cannot_block_timeless_publication(self):
+        self.page("topics/page.md")
+        self.page("whatsapp/brain/page.md", "# Missing metadata")
+        self.assertEqual(validator.validate(self.root, "timeless"), [])
+        self.assertTrue(validator.validate(self.root, "whatsapp"))
+        self.assertTrue(validator.validate(self.root))
+
+    def test_scoped_validation_still_enforces_isolation(self):
+        self.page("topics/page.md", "# Invalid Timeless page")
+        self.page("whatsapp/brain/page.md", META + "[other](../../topics/page.md)")
+        errors = validator.validate(self.root, "whatsapp")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("isolation boundary", errors[0])
+
+    def test_checkpoint_scope_includes_the_canonical_whatsapp_checkpoint(self):
+        (self.root / "whatsapp-ingestion.json").write_text("[]")
+        self.assertEqual(validator.validate(self.root, "timeless"), [])
+        self.assertTrue(validator.validate(self.root, "whatsapp"))
+
+    def test_whatsapp_checkpoint_cannot_cause_reads_of_timeless_projects(self):
+        value = {"files": {"source": {"modifiedTime": "2026-10-23T00:00:00Z", "project_outputs": ["projects/private.md"]}}}
+        (self.root / "whatsapp-ingestion.json").write_text(json.dumps(value))
+        with patch.object(validator, "project_output_error", side_effect=AssertionError("cross-domain read")):
+            errors = validator.validate(self.root, "whatsapp")
+        self.assertTrue(any("cannot claim Timeless project outputs" in error for error in errors))
 
 
 if __name__ == "__main__":

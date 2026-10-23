@@ -45,3 +45,5 @@ report source-page coverage and output paths.
 Resolve every relative link from the containing file's directory. Weekly pages are one directory deeper than overview pages; never copy overview links unchanged into `brain/weekly/`.
 
 Preserve every existing weekly snapshot when rebuilding the current week; never clear or replace the weekly directory. Keep historical snapshots linked from the brain index.
+
+Before reporting completion, run `python3 /workspace/agent/knowledge-validator.py /workspace/extra/timeless-wiki --scope timeless` and fix every error. Top-level metadata keys such as `title` must start at column one. Links from `brain/weekly/` to canonical project pages use `../../projects/<name>.md`, not `../projects/<name>.md`. If the validator is unavailable or fails, report the exact validation gap instead of claiming a successful rebuild.
