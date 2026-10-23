@@ -208,18 +208,13 @@
           - "pnpm-lock.yaml"
           - "pnpm-workspace.yaml"
           - "README.md"
-          - "README_ja.md"
-          - "README_ko.md"
-          - "README_zh.md"
           - "CHANGELOG.md"
-          - "CODE_OF_CONDUCT.md"
           - "CONTRIBUTING.md"
           - "CONTRIBUTORS.md"
           - "LICENSE"
           - "RELEASING.md"
           - "docs/README.md"
           - "docs/BRANCH-FORK-MAINTENANCE.md"
-          - "repo-tokens/**"
           - "scripts/release*"
 
 "area/scheduled-tasks":

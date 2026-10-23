@@ -1,11 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Report a security vulnerability privately
-    url: https://github.com/nanocoai/nanoclaw/security/advisories/new
-    about: Do not open a public issue for exploitable or sensitive findings.
-  - name: Ask a usage question
-    url: https://github.com/nanocoai/nanoclaw/discussions
-    about: Ask setup, usage, and troubleshooting questions in GitHub Discussions.
-  - name: Join the NanoClaw community
-    url: https://discord.gg/VDdww8qS42
-    about: Chat with the community on Discord.
+  - name: Sensitive security findings
+    url: https://github.com/roihezkiRaven/nanoclaw/blob/main/SECURITY.md
+    about: Read the private-reporting guidance; do not post secrets or exploits publicly.
+  - name: PersonalAssist documentation
+    url: https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/README.md
+    about: Application operations, knowledge pipelines, deployment, and runtime references.

@@ -1,5 +1,5 @@
 name: "🐛 Bug report"
-description: Report something in NanoClaw that is not working as expected.
+description: Report something in PersonalAssist that is not working as expected.
 title: "[bug] "
 labels:
   - kind/bug
@@ -10,16 +10,16 @@ body:
       value: |
         Search existing issues before opening a new report.
 
-        For setup or usage problems, start with [Troubleshooting](https://docs.nanoclaw.dev/operate/troubleshooting) or ask in [GitHub Discussions](https://github.com/nanocoai/nanoclaw/discussions).
+        For setup or usage problems, start with [Troubleshooting](https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/personal-assistant/operations.md) or ask in [this repository’s issues](https://github.com/roihezkiRaven/nanoclaw/issues).
 
-        If this could be an exploitable vulnerability, [report it privately](https://github.com/nanocoai/nanoclaw/security/advisories/new).
+        If this could be an exploitable vulnerability, [report it privately](https://github.com/roihezkiRaven/nanoclaw/blob/main/SECURITY.md).
 
         ### Required information
 
   - type: input
     id: version
     attributes:
-      label: Affected NanoClaw version or commit
+      label: Affected PersonalAssist version or commit
       description: Use the exact release or commit SHA you tested.
       placeholder: v2.3.0 or 294ef2ae
     validations:
@@ -76,7 +76,7 @@ body:
 
         The remaining fields are optional. Fill in only what applies.
 
-        Setup or update problem? See [Installation](https://docs.nanoclaw.dev/installation) or [Upgrading](https://docs.nanoclaw.dev/operate/upgrading). Channel or provider problem? See [Channels](https://docs.nanoclaw.dev/channels/overview) or [Agent providers](https://docs.nanoclaw.dev/extend/providers).
+        Setup or update problem? See [Installation](https://github.com/roihezkiRaven/nanoclaw/blob/main/deploy/hetzner/README.md) or [Upgrading](https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/personal-assistant/updates.md). Channel or provider problem? See [Channels](https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/guide/setup-wiring.md) or [Agent providers](https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/migrations/provider-migration.md).
 
   - type: input
     id: os-details

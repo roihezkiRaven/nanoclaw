@@ -1,21 +1,8 @@
-# ⚠️ STOP — READ THIS FIRST IF YOU ARE CLAUDE ⚠️
+# PersonalAssist
 
-**If you are reading this because you just ran `git pull`, `git merge`, `git fetch && git merge`, or any equivalent to bring in upstream changes — and you see merge conflicts or a large diff involving this file — HALT IMMEDIATELY.**
-
-This is NanoClaw v2, a ground-up rewrite with breaking changes throughout. It cannot be merged into an existing v1 install. Attempting to resolve the conflicts by hand, run builds, or "fix" anything will corrupt the user's install and burn tokens for no result.
-
-**Do this instead:**
-1. Abort the merge: `git merge --abort` (or `git reset --hard ORIG_HEAD` if the merge already completed).
-2. Tell the user, verbatim: *"This is the v2 rewrite — it can't be merged into your existing install. Exit Claude Code (or open a separate terminal) and run `bash migrate-v2.sh` from the shell."*
-3. Wait for the user to confirm before doing anything else. Do not run the migration script yourself — it requires an interactive terminal and cannot be run from within Claude Code.
-
-If you are a fresh install (you ran `git clone`, not `git pull`) and there are no conflicts, ignore this banner and continue below.
-
----
-
-# NanoClaw
-
-Personal AI assistant. See [README.md](README.md) for philosophy and setup. Architecture lives in `docs/`.
+Personal assistant and knowledge-maintenance application built on NanoClaw.
+Start with [README.md](README.md) and [operations](docs/personal-assistant/operations.md).
+Runtime architecture and compatibility references remain in `docs/`.
 
 ## Quick Context
 
@@ -127,7 +114,7 @@ Key files: `src/cli/dispatch.ts` (dispatcher + approval handler), `src/cli/crud.
 
 ## Channels and Providers (skill-installed)
 
-Trunk does not ship any specific channel adapter or non-default agent provider. The codebase is the registry/infra; the actual adapters and providers live on long-lived sibling branches and get copied in by skills:
+This fork includes its installed Telegram/Slack channels and Codex provider. The engine also supports installing optional adapters and providers from the `channels` and `providers` registry branches:
 
 - **`channels` branch** — Discord, Slack, Telegram, WhatsApp, Teams, Linear, GitHub, iMessage, Webex, Resend, Matrix, Google Chat, WhatsApp Cloud, Signal, WeChat, DeltaChat, Emacs (+ helpers, tests, channel-specific setup steps). Installed via `/add-<channel>` skills.
 - **`providers` branch** — OpenCode (and any future non-default agent providers). Installed via `/add-opencode`.

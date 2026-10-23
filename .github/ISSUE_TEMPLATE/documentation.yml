@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Browse the [NanoClaw docs](https://docs.nanoclaw.dev/) or search the repository before opening a new report.
+        Browse the [PersonalAssist docs](https://github.com/roihezkiRaven/nanoclaw/blob/main/docs/README.md) or search the repository before opening a new report.
 
         ### Required information
 
@@ -17,7 +17,7 @@ body:
     attributes:
       label: Page or path
       description: Link the docs page or give the repository path.
-      placeholder: https://docs.nanoclaw.dev/... or docs/...
+      placeholder: docs/personal-assistant/operations.md or another repository path
     validations:
       required: true
 
@@ -38,7 +38,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: NanoClaw version or commit
+      label: PersonalAssist version or commit
       description: Add this when the documented behavior depends on the version.
       placeholder: v2.3.0 or 294ef2ae
 

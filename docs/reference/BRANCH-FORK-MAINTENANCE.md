@@ -1,6 +1,6 @@
-# Branch and fork maintenance
+# Upstream registry branch reference
 
-How the long-lived branches on `nanocoai/nanoclaw` relate to `main` and how to keep them in sync. This is the maintainer view: [skills-model.md](../skills/skills-model.md) explains the customization model itself, and [CONTRIBUTING.md](../../CONTRIBUTING.md) covers contributing a channel or provider.
+Historical reference for how the upstream `nanocoai/nanoclaw` registry branches relate to its `main`. For PersonalAssist deployment updates, use [the application update guide](../personal-assistant/updates.md). This is the maintainer view: [skills-model.md](../skills/skills-model.md) explains the customization model itself, and [CONTRIBUTING.md](../../CONTRIBUTING.md) describes this fork’s review workflow.
 
 ## Structure
 
@@ -56,7 +56,6 @@ Files with known mechanical resolutions:
 | `package.json` | Take main's version + keep branch-specific deps |
 | `pnpm-lock.yaml` | `git checkout main -- pnpm-lock.yaml && pnpm install` |
 | `.env.example` | Combine: main's entries + branch-specific entries |
-| `repo-tokens/badge.svg` | Take main's version (auto-generated) |
 
 Source code changes (e.g. `src/types.ts`, `src/index.ts`) usually auto-merge cleanly, but can conflict if both sides modify the same lines. **Always build and test after every forward merge** — auto-merged code can be silently wrong (e.g. referencing a renamed function or using a removed parameter) even when git reports no conflicts.
 

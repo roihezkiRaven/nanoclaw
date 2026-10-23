@@ -10,7 +10,7 @@ import {
   verifyRelease,
 } from './release.mjs';
 
-const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+const releaseWorkflow = readFileSync(new URL('../docs/reference/upstream-release.yml', import.meta.url), 'utf8');
 const repositoryChangelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 
 const changelog = `# Changelog
@@ -61,7 +61,7 @@ describe('release metadata', () => {
   });
 });
 
-describe('release workflow safeguards', () => {
+describe('historical upstream release workflow safeguards', () => {
   it('fails wrong-repository and wrong-ref dispatches instead of skipping verification', () => {
     expect(releaseWorkflow).toContain('name: Verify dispatch source');
     expect(releaseWorkflow).toContain('if [ "$DISPATCH_REPOSITORY" != "nanocoai/nanoclaw" ]');
