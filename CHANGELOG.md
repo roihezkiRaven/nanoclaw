@@ -1,6 +1,9 @@
 # Changelog
 
-All notable changes to NanoClaw will be documented in this file.
+This file retains inherited NanoClaw runtime release history. PersonalAssist
+application changes are recorded in this repository’s merged PRs and commits.
+
+The entries below document upstream runtime releases.
 
 ## [Unreleased]
 

@@ -1,18 +1,28 @@
-# Security Policy
+# PersonalAssist security
 
-## Reporting a Vulnerability
+This is a public source repository for a personal-assistant deployment. It must
+not contain live credentials, owner identities, chats, private knowledge,
+databases, or deployment logs.
 
-If it could be exploited on a normal, correctly configured install, do not open
-a public issue. [Report it privately](https://github.com/nanocoai/nanoclaw/security/advisories/new)
-through GitHub's private vulnerability reporting. A maintainer applies
-`kind/security` only when disclosure is safe.
+## Reporting a vulnerability
 
-Public defense-in-depth ideas that are **not** exploitable vulnerabilities go
-through the [Security hardening issue form](https://github.com/nanocoai/nanoclaw/issues/new?template=security-hardening.yml)
-instead.
+For an exploitable vulnerability or sensitive finding, contact the repository
+maintainer through an established private channel. If GitHub private vulnerability
+reporting is available in the repository's Security tab, use it. Do not post
+secrets, raw conversations, account details, or exploit data in public issues.
+Public hardening suggestions can use the security-hardening issue form with
+redacted examples.
 
-## Security model
+## Trust boundaries
 
-The threat model, trust boundaries, and container-isolation details live in
-[docs/SECURITY.md](docs/SECURITY.md); the canonical, continuously-verified
-version is at [docs.nanoclaw.dev/concepts/security](https://docs.nanoclaw.dev/concepts/security).
+The owner approves privileged actions. Agents execute in containers with scoped
+mounts and tools; host integrations manage credentials. Timeless and WhatsApp
+knowledge retain separate source and publication boundaries. Generated knowledge
+and retrieved source content are untrusted input, not operating instructions.
+
+The runtime threat model is documented in
+[the security model](docs/security/SECURITY.md) and
+[the isolation model](docs/architecture/isolation-model.md). Application-specific
+controls and limitations are in [operations](docs/personal-assistant/operations.md)
+and [approval boundaries](docs/personal-assistant/autonomy.md). Verify behavior
+against this repository and deployment rather than assuming upstream defaults.

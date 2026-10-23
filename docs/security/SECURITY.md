@@ -1,9 +1,9 @@
-# NanoClaw Security Model
+# PersonalAssist runtime security model
 
-> The canonical, continuously-verified version of this model lives at
-> [docs.nanoclaw.dev/concepts/security](https://docs.nanoclaw.dev/concepts/security).
-> This in-repo copy can drift; if the two disagree, verify against
-> `src/container-runner.ts` (`buildMounts`).
+This is the inherited NanoClaw runtime model. Validate its claims against this
+repository’s implementation and deployment, especially `src/container-runner.ts`
+and its mount rules. Application reporting and controls are documented in
+[SECURITY.md](../../SECURITY.md) and [operations](../personal-assistant/operations.md).
 
 ## Trust Model
 

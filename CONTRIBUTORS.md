@@ -1,6 +1,8 @@
-# Contributors
+# Credits
 
-Thanks to everyone who has contributed to NanoClaw!
+PersonalAssist is maintained in this repository by [roihezkiRaven](https://github.com/roihezkiRaven).
+
+The following historical NanoClaw contributor credits are retained with the inherited runtime:
 
 - [Alakazam03](https://github.com/Alakazam03) — Vaibhav Aggarwal
 - [tydev-new](https://github.com/tydev-new)

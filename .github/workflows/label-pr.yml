@@ -132,7 +132,7 @@ jobs:
               };
 
               // Lowercase GitHub logins; keep in sync with the core team roster.
-              const CORE_TEAM = ['gavrielc', 'koshkoshinsk', 'glifocat', 'gabi-simons', 'omri-maya', 'amit-shafnir', 'moshe-nanoco', 'zvi-fried'];
+              const CORE_TEAM = ['roihezkiraven'];
               const coreTeam = CORE_TEAM.includes((author || '').toLowerCase());
               if (coreTeam) add.push('core-team');
 
