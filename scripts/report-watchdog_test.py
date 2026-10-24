@@ -57,6 +57,19 @@ class DeliveryWatchdogTest(unittest.TestCase):
         self.inspect(6000)
         self.assertEqual(len(self.alerts), 1)
 
+    def test_degraded_publication_alerts_once_without_pointless_retry(self):
+        properties = lambda unit: {"Result": "success", "ActiveState": "inactive", "ExecMainExitTimestamp": "Sun 2026-10-04 18:00:00 UTC"}
+        publication = lambda unit: {"mode": "degraded", "brain_snapshot_at": "2026-10-03T18:00:00Z"}
+        for _ in range(2):
+            watchdog.inspect_knowledge_sync(self.state, self.start, self.alerts.append, lambda: None,
+                                             properties, self.retries.append, publication)
+        self.assertEqual(len(self.alerts), 2)
+        self.assertFalse(self.retries)
+        self.assertIn("2026-10-03", self.alerts[0])
+        watchdog.inspect_knowledge_sync(self.state, self.start, self.alerts.append, lambda: None,
+                                         properties, self.retries.append, lambda unit: {"mode": "healthy"})
+        self.assertTrue(all(not record for record in self.state["knowledge_sync"].values()))
+
     def test_failed_sync_retries_once_and_alerts_without_using_the_model(self):
         properties = lambda unit: {"Result": "exit-code", "ActiveState": "failed", "ExecMainExitTimestamp": ""}
         for _ in range(2):

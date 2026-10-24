@@ -1,14 +1,17 @@
 [Unit]
 Description=Mirror WhatsApp knowledge digests to Google Drive
 After=network-online.target gdrive-broker.service
+StartLimitIntervalSec=15min
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
+Restart=on-failure
+RestartSec=60
 WorkingDirectory=/home/assistant/nanoclaw
 EnvironmentFile=/home/assistant/nanoclaw/.env
-ExecStartPre=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/scripts/validate-knowledge-wiki.py /home/assistant/nanoclaw/data/timeless-wiki --scope whatsapp
-ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/sync_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki --drive-folder ${WHATSAPP_KNOWLEDGE_FOLDER_ID} --state-file /home/assistant/nanoclaw/data/timeless-wiki/.whatsapp-drive-sync.json --include-dir whatsapp
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/publish_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki --scope whatsapp --state-dir /home/assistant/nanoclaw/data/knowledge-publication/whatsapp --drive-folder ${WHATSAPP_KNOWLEDGE_FOLDER_ID} --sync-state /home/assistant/nanoclaw/data/timeless-wiki/.whatsapp-drive-sync.json
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/home/assistant/nanoclaw/data/timeless-wiki /home/assistant/nanoclaw/config/google
+ReadWritePaths=/home/assistant/nanoclaw/data/knowledge-publication /home/assistant/nanoclaw/data/timeless-wiki /home/assistant/nanoclaw/config/google
