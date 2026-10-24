@@ -186,7 +186,7 @@ def retry_sync(unit):
                    check=True, capture_output=True, timeout=10)
 
 
-def inspect_knowledge_sync(state, now, alert, persist, properties=sync_properties, retry=retry_sync):
+def inspect_knowledge_sync(state, now, alert, persist, properties=sync_properties, retry=retry_sync, publication=lambda unit: {}):
     """Detect failed/stale mirrors independently of model availability."""
     events = []
     day = dt.datetime.fromtimestamp(now, dt.timezone.utc).date().isoformat()
@@ -198,10 +198,31 @@ def inspect_knowledge_sync(state, now, alert, persist, properties=sync_propertie
         last = dt.datetime.strptime(stamp, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=dt.timezone.utc).timestamp() if stamp else state["started_at"]
         record = state.setdefault("knowledge_sync", {}).setdefault(unit, {})
         if info.get("Result") == "success" and now - last <= 36 * 3600:
-            record.clear()
+            status = publication(unit)
+            if status.get("mode") == "degraded":
+                events += alert_degraded(unit, record, day, status, alert, persist)
+            else:
+                record.clear()
             continue
         events += recover_sync(unit, record, day, alert, persist, retry)
     return events
+
+
+def alert_degraded(unit, record, day, status, alert, persist):
+    if record.get("degraded_alert_day") == day:
+        return []
+    stamp = status.get("brain_snapshot_at", "unknown")
+    message = f"Knowledge publishing degraded: {unit} published validated source pages with last-good synthesis from {stamp}. The rejected synthesis is preserved for repair."
+    record["alert_message_id"] = alert(message)
+    record["degraded_alert_day"] = day
+    persist()
+    return [{"unit": unit, "action": "degraded_alert"}]
+
+
+def publication_status(root, unit):
+    scope = "whatsapp" if unit.startswith("whatsapp") else "timeless"
+    path = root / "data/knowledge-publication" / scope / "status.json"
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def recover_sync(unit, record, day, alert, persist, retry):
@@ -236,7 +257,7 @@ def main():
 
     now = dt.datetime.now(dt.timezone.utc).timestamp()
     alert, persist = lambda text: telegram_alert(root, text), lambda: save(path, state)
-    events = inspect_knowledge_sync(state, now, alert, persist)
+    events = inspect_knowledge_sync(state, now, alert, persist, publication=lambda unit: publication_status(root, unit))
     events += inspect(root, state, now, retry, alert, persist)
     save(path, state)
     print(json.dumps({"ok": True, "events": events}))

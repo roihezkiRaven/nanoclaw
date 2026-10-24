@@ -38,6 +38,12 @@ jobs:
       - name: Typecheck container
         run: pnpm exec tsc -p container/agent-runner/tsconfig.json --noEmit
 
+      - name: Knowledge publication tests
+        run: |
+          python3 scripts/validate_knowledge_wiki_test.py
+          python3 scripts/report-watchdog_test.py
+          python3 -m unittest discover -s tools -p publish_knowledge_wiki_test.py
+
       - name: Host tests
         run: pnpm exec vitest run
 

@@ -322,3 +322,31 @@ with a group image rebuild after installation. Deploy the canonical
 `scripts/validate-knowledge-wiki.py` to each group's ignored
 `knowledge-validator.py` whenever the validator changes. Maintainers run it via
 `/workspace/agent/knowledge-validator.py` before reporting success.
+
+The host publication entrypoint is `tools/publish_knowledge_wiki.py`; model-side
+validation is advisory. Deploy this entrypoint with both updated sync units and
+create `data/knowledge-publication/` before reloading systemd. Keep the existing
+Drive sync-state paths so published page IDs survive the upgrade.
+
+Each scope takes a private, locked snapshot, validates it, then invokes the
+checkpointed Drive uploader. Only a successful upload replaces
+`data/knowledge-publication/<scope>/last-good.zip`. The only automatic content
+repair is an off-by-one weekly WhatsApp link to an existing dated group digest
+with exact JID provenance. Successful repairs are written back only if the
+original file has not changed; originals are preserved under `repair-originals/`.
+
+If synthesis remains invalid, the publisher preserves `rejected.zip`, restores
+only the previously published brain and root navigation into the snapshot, and
+validates everything again. Fresh valid source/daily pages still publish.
+Invalid daily/source pages, missing or corrupt fallback archives, and remaining
+broken references fail closed. Fallback does not rewrite the model's rejected
+synthesis in the live wiki. `status.json` records `degraded`, the actual synthesis
+snapshot time, and validation findings; the watchdog alerts once per day without
+retrying unchanged model output. Repair the rejected synthesis and rerun the unit
+to return to `healthy`.
+
+Upload failures preserve checkpoints and the prior cache. The uploader has a
+15-minute bound; systemd retries failures twice at 60-second intervals, subject
+to a three-start limit per 15 minutes. These retries recover transient failures;
+they cannot repair invalid source provenance or restore revoked credentials.
+All publication snapshots, originals, and status are private ignored runtime data.
