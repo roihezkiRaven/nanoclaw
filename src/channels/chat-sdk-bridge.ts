@@ -950,13 +950,12 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
               attachFiles ? { markdown: chunk, files: fileUploads } : { markdown: chunk },
             );
           } catch (error) {
-            if (
-              adapter.name !== 'telegram' ||
-              !(error instanceof Error) ||
-              !/can't parse entities/i.test(error.message)
-            )
-              throw error;
-            result = await adapter.postMessage(tid, attachFiles ? { raw: chunk, files: fileUploads } : { raw: chunk });
+            if (adapter.name !== 'telegram' || !(error instanceof Error) ||
+                !/can't parse entities/i.test(error.message)) throw error;
+            result = await adapter.postMessage(
+              tid,
+              attachFiles ? { raw: chunk, files: fileUploads } : { raw: chunk },
+            );
           }
           if (i === 0) firstId = result?.id;
         }

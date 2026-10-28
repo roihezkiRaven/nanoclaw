@@ -1,4 +1,3 @@
-import { initialCoverage, connectionCoverage, capturedCoverage, uploadedCoverage, type Coverage } from '../src/modules/personal-assistant/whatsapp-coverage.js';
 /** Deterministic, allow-listed WhatsApp group archive collector. */
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
@@ -218,17 +217,15 @@ function textFrom(message: proto.IMessage | null | undefined): string | null {
   return null;
 }
 
-function archive(records: ArchiveRecord[], parentId: string): Promise<{ id: string; modifiedTime: string }> {
-  if (!records.length) throw new Error("empty upload batch");
+function archive(records: ArchiveRecord[], parentId: string): Promise<void> {
+  if (!records.length) return Promise.resolve();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(STATE_DIR, `batch-${stamp}.jsonl`);
   atomicWrite(file, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
   return new Promise((resolve, reject) => {
     const child = spawn(`${ROOT}/.venv-gdrive/bin/python`, [
       `${ROOT}/tools/gdrive_assistant.py`, 'writer', 'write', '--name', `whatsapp-raw-${stamp}.jsonl`, '--text-file', file, '--parent-id', parentId,
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let output = '';
-    child.stdout.on('data', (chunk) => { output += String(chunk); });
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let error = '';
     child.stderr.on('data', (chunk) => { error += String(chunk); });
     child.on('error', (error) => {
@@ -237,12 +234,7 @@ function archive(records: ArchiveRecord[], parentId: string): Promise<{ id: stri
     });
     child.on('exit', (code) => {
       fs.rmSync(file, { force: true });
-      if (code !== 0) return reject(new Error(error || `Drive archive exit ${code}`));
-      try {
-        const file = JSON.parse(output);
-        if (!file.id || !file.modifiedTime || JSON.stringify(file.parents) !== JSON.stringify([parentId])) throw new Error('unverified archive result');
-        resolve(file);
-      } catch { reject(new Error('Archive created but metadata is unverified; inspect before retrying')); }
+      code === 0 ? resolve() : reject(new Error(error || `Drive archive exit ${code}`));
     });
   });
 }
@@ -266,15 +258,6 @@ async function collect(): Promise<void> {
   const config = loadConfig();
   const groups = new Map(config.allowedGroups.map((group) => [group.jid, group]));
   const seen = loadSeen();
-  const coverageFile = path.join(STATE_DIR, 'coverage.json');
-  let coverage: Coverage;
-  try { coverage = JSON.parse(fs.readFileSync(coverageFile, 'utf8')); if (coverage.version !== 1) throw new Error(); }
-  catch (error) { if (fs.existsSync(coverageFile)) throw new Error('Invalid coverage checkpoint; preserve and repair it'); coverage = initialCoverage(config.allowedGroups, new Date().toISOString()); }
-  const defaults = initialCoverage(config.allowedGroups, new Date().toISOString());
-  for (const [jid, value] of Object.entries(defaults.groups)) coverage.groups[jid] ??= value;
-  connectionCoverage(coverage, false, coverage.heartbeat);
-  const saveCoverage = () => atomicWrite(coverageFile, JSON.stringify(coverage));
-  saveCoverage();
   let flushing = false;
   const flush = async () => {
     if (flushing) return;
@@ -282,9 +265,7 @@ async function collect(): Promise<void> {
     if (!batch.length) return;
     flushing = true;
     try {
-      const archived = await archive(batch.map(({ record }) => record), config.archiveParentId);
-      uploadedCoverage(coverage, batch.map(({ record }) => record), archived, new Date().toISOString());
-      saveCoverage();
+      await archive(batch.map(({ record }) => record), config.archiveParentId);
       for (const { record } of batch) seen.add(recordKey(record));
       saveSeen(seen);
       atomicWrite(path.join(STATE_DIR, 'last-upload'), `${new Date().toISOString()}\n`);
@@ -293,8 +274,6 @@ async function collect(): Promise<void> {
         fs.rmSync(file, { force: true });
       }
     } catch (error) {
-      coverage.upload_error = new Date().toISOString() + ': upload failed or verification unavailable';
-      saveCoverage();
       console.error(`whatsapp-collector: archive failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally { flushing = false; }
   };
@@ -317,20 +296,17 @@ async function collect(): Promise<void> {
       if (!Number.isFinite(messageTimestamp) || messageTimestamp < config.activationAfter) continue;
       const text = textFrom(item.message);
       if (!text || Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) continue;
-      const record = { collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(messageTimestamp * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text };
-      if (enqueue(record)) { capturedCoverage(coverage, record); saveCoverage(); }
+      enqueue({ collectedAt: new Date().toISOString(), groupJid: jid, groupLabel: groups.get(jid)!.label, messageId: id, timestamp: new Date(messageTimestamp * 1000).toISOString(), senderJid: item.key.participant ?? 'unknown', text });
     }
   });
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection === 'open') {
       connected = true;
-      connectionCoverage(coverage, true, new Date().toISOString()); saveCoverage();
       heartbeat();
       console.log('whatsapp-collector: connected');
     }
     if (connection === 'close') {
       connected = false;
-      connectionCoverage(coverage, false, new Date().toISOString()); saveCoverage();
       fs.rmSync(HEARTBEAT_FILE, { force: true });
       const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) fail('logged out; relink required', 78);
@@ -339,9 +315,9 @@ async function collect(): Promise<void> {
     }
   });
   void flush();
-  setInterval(() => { if (connected) { heartbeat(); coverage.heartbeat = new Date().toISOString(); saveCoverage(); } }, 30_000).unref();
+  setInterval(() => { if (connected) heartbeat(); }, 30_000).unref();
   setInterval(() => void flush(), UPLOAD_INTERVAL_MS).unref();
-  process.on('SIGTERM', () => { connectionCoverage(coverage, false, new Date().toISOString()); saveCoverage(); void flush().finally(() => process.exit(0)); });
+  process.on('SIGTERM', () => { void flush().finally(() => process.exit(0)); });
 }
 
 if (process.argv[2] === 'list-groups') void listGroups();

@@ -274,9 +274,7 @@ async function handleControlCommand(
     return true;
   }
   if (command.name === 'models') {
-    await sendTelegramMessage(token, platformId, {
-      text: formatModelCatalog(config.model, getCodexModels(agentGroupId)),
-    });
+    await sendTelegramMessage(token, platformId, { text: formatModelCatalog(config.model, getCodexModels(agentGroupId)) });
     return true;
   }
   if (command.name === 'model') {
@@ -455,11 +453,11 @@ export function createTelegramInboundInterceptor(
 
     try {
       if (!botUsername) {
-        await hostOnInbound(platformId, threadId, message);
+        hostOnInbound(platformId, threadId, message);
         return;
       }
       if (!text) {
-        await hostOnInbound(platformId, threadId, message);
+        hostOnInbound(platformId, threadId, message);
         return;
       }
       const consumed = await tryConsume({
@@ -471,7 +469,7 @@ export function createTelegramInboundInterceptor(
         instance: instanceKey,
       });
       if (!consumed) {
-        await hostOnInbound(platformId, threadId, message);
+        hostOnInbound(platformId, threadId, message);
         return;
       }
       // Pairing matched — record the chat and short-circuit so the
@@ -531,7 +529,7 @@ export function createTelegramInboundInterceptor(
     } catch (err) {
       log.error('Telegram pairing interceptor error', { err });
       // Fail open: pass through so a pairing bug doesn't break normal traffic.
-      await hostOnInbound(platformId, threadId, message);
+      hostOnInbound(platformId, threadId, message);
     }
   };
 }

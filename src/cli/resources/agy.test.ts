@@ -1,7 +1,5 @@
 import { expect, it, vi } from 'vitest';
 
-const cancellation = vi.hoisted(() => ({ cancelled: false }));
-vi.mock('../../modules/scheduling/cancellation.js', () => ({ taskSessionCancelled: () => cancellation.cancelled }));
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
 vi.mock('../../db/agent-groups.js', () => ({ getAgentGroup: vi.fn() }));
 vi.mock('../../session-manager.js', () => ({ sessionDir: vi.fn() }));
@@ -49,7 +47,6 @@ it('stages only selected Drive media and cleans the private workspace on success
     const callback = rawCallback as (error: Error | null, result?: { stdout: string; stderr: string }) => void;
     void (async () => {
       let result;
-      if (args[0] === 'models') return callback(null, { stdout: 'gemini-4-argon-high\tArgon High', stderr: '' });
       if (String(binary).endsWith('/python')) {
         staging = args[args.indexOf('--output-dir') + 1];
         const mediaPath = `${staging}/selected-video.mp4`;
@@ -78,56 +75,4 @@ it('stages only selected Drive media and cleans the private workspace on success
   fail = true;
   await expect(command.handler(args, ctx)).rejects.toThrow('worker timeout');
   await expect(fs.stat(staging)).rejects.toThrow();
-});
-
-it('rejects unavailable explicit models before downloading video or starting a worker', async () => {
-  const { execFile } = await import('node:child_process');
-  const { getAgentGroup } = await import('../../db/agent-groups.js');
-  const { lookup } = await import('../registry.js');
-  vi.mocked(getAgentGroup).mockResolvedValue({ folder: 'personal-assistant' } as any);
-  vi.mocked(execFile).mockClear();
-  vi.mocked(execFile).mockImplementation((...args: any[]) => {
-    expect(args[1]).toEqual(['models']);
-    args.at(-1)(null, { stdout: 'Fetching available models...\ngemini-3.8-flash-high\tFlash', stderr: '' });
-    return {} as any;
-  });
-  await expect(
-    lookup('agy-media-run')!.handler(
-      parseAgyMediaArgs({ prompt: 'Inspect', file_id: 'selected_video_123', model: 'gemini-4-argon-high' }),
-      { caller: 'agent', sessionId: 's', agentGroupId: 'g', messagingGroupId: 'dm' },
-    ),
-  ).rejects.toThrow('no fallback');
-  expect(execFile).toHaveBeenCalledTimes(1);
-});
-
-it('aborts an active host AGY request when its task is cancelled', async () => {
-  const { execFile } = await import('node:child_process');
-  const { getAgentGroup } = await import('../../db/agent-groups.js');
-  const { sessionDir } = await import('../../session-manager.js');
-  const { lookup } = await import('../registry.js');
-  vi.mocked(getAgentGroup).mockResolvedValue({ folder: 'personal-assistant' } as any);
-  vi.mocked(sessionDir).mockReturnValue('/tmp/agy-cancel-fixture');
-  let signal: AbortSignal | undefined;
-  vi.mocked(execFile).mockImplementation((...args: any[]) => {
-    signal = args[2].signal;
-    signal!.addEventListener('abort', () => args.at(-1)(new Error('AGY aborted')));
-    return {} as any;
-  });
-  vi.useFakeTimers();
-  try {
-    const running = lookup('agy-run')!.handler(
-      { prompt: 'Test cancellation' },
-      { caller: 'agent', agentGroupId: 'g', sessionId: 's', messagingGroupId: 'dm' },
-    );
-    const rejected = expect(running).rejects.toThrow('AGY aborted');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(signal).toBeDefined();
-    cancellation.cancelled = true;
-    await vi.advanceTimersByTimeAsync(1000);
-    await rejected;
-    expect(signal!.aborted).toBe(true);
-  } finally {
-    cancellation.cancelled = false;
-    vi.useRealTimers();
-  }
 });

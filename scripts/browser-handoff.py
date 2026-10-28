@@ -2,23 +2,19 @@
 """Forward the prepared agent browser to this Mac over SSH, on loopback only."""
 import datetime as dt
 import json
-import os
-from pathlib import Path
 import re
 import socketserver
 import subprocess
 import threading
 import webbrowser
 
-HOST = os.environ.get("NANOCLAW_SSH_HOST", "")
+HOST = "assistant@157.180.44.97"
 PORT = 4848
 READ_STATE = "cat /home/assistant/nanoclaw/groups/personal-assistant/work/browser-handoff.json"
 STREAM = "const s=require('net').connect(PORT,'127.0.0.1');process.stdin.pipe(s);s.pipe(process.stdout);s.on('error',()=>process.exit(1));s.on('close',()=>process.exit(0));"
 
 
 def remote(*command):
-    if not HOST:
-        raise ValueError("Set NANOCLAW_SSH_HOST to the configured assistant SSH host")
     return subprocess.check_output(["ssh", "-o", "BatchMode=yes", HOST, *command], text=True, timeout=20)
 
 
@@ -28,7 +24,7 @@ def container_for(state, listing):
         raise ValueError("Invalid browser handoff identity")
     for line in listing.splitlines():
         identity, name = line.split()
-        if (identity.startswith(hostname) or hostname.startswith(identity)) and re.fullmatch(r"ncl-[0-9a-f]{8}-sess-[a-z0-9-]+", name):
+        if (identity.startswith(hostname) or hostname.startswith(identity)) and re.fullmatch(r"ncl-fc17183a-sess-[a-z0-9-]+", name):
             return name
     raise ValueError("Browser session expired. Ask the agent to prepare a new handoff in Telegram.")
 
@@ -52,12 +48,6 @@ class Bridge(socketserver.ThreadingTCPServer):
 
 
 def main():
-    global HOST
-    if not HOST:
-        settings = Path(__file__).resolve().parents[1] / "config/browser-handoff.json"
-        HOST = json.loads(settings.read_text())["ssh_host"]
-    if not isinstance(HOST, str) or not re.fullmatch(r"[A-Za-z0-9_.@:-]+", HOST) or HOST.startswith("-"):
-        raise ValueError("Invalid browser handoff SSH host")
     state = json.loads(remote(READ_STATE))
     if state.get("provider") not in ("tavily", "gemini") or state.get("status") != "waiting_human":
         raise ValueError("Ask the agent in Telegram to prepare the approved provider handoff first.")

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { CONTAINER_IMAGE, DATA_DIR, GROUPS_DIR } from '../../config.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
-import { INSTALL_SLUG } from '../../config.js';
+import { restartAgentGroupContainers } from '../../container-restart.js';
 import type { CallerContext } from '../frame.js';
 import { register } from '../registry.js';
 
@@ -18,74 +18,41 @@ const hash = (text: string | null) =>
     .update(text ?? '<absent>')
     .digest('hex');
 type Patch = { files: Record<string, string>; tests: string[]; summary: string };
-type Draft = Patch & {
-  format?: number;
-  group: string;
-  baseline: Record<string, string | null>;
-  diff: string;
-  digest: string;
-};
+type Draft = Patch & { group: string; baseline: Record<string, string | null>; diff: string; digest: string };
 
 export function sourcePath(value: unknown): string {
   if (
     typeof value !== 'string' ||
     value.includes('..') ||
     value.includes('\\') ||
-    !(
-      /^(?:src\/(?:cli\/resources|modules\/(?:personal-assistant|scheduling))|container\/agent-runner\/src\/mcp-tools)\/[a-zA-Z0-9_./-]+\.ts$/.test(
-        value,
-      ) ||
-      /^(?:tools\/(?:gdrive_(?:broker|assistant)(?:_test)?\.py|whatsapp_collector\.ts)|src\/(?:delivery|model-catalog|cli\/format-tasks|mailbox\/types|mailbox\/sqlite\/tasks)(?:\.test)?\.ts)$/.test(
-        value,
-      )
+    !/^(?:src\/(?:cli\/resources|modules\/personal-assistant)|container\/agent-runner\/src\/mcp-tools)\/[a-zA-Z0-9_./-]+\.ts$/.test(
+      value,
     )
   )
     throw new Error(
-      'Only allowlisted integration source and tests are supported; controllers, config, guards and credentials are excluded.',
+      'Only capability TypeScript source files are supported; config, guards and credentials are excluded.',
     );
   return value;
-}
-
-function invalidSourceText(text: string): boolean {
-  for (const char of text) {
-    const code = char.codePointAt(0)!;
-    if (/\p{Cf}/u.test(char) || (code < 32 && ![9, 10, 13].includes(code)) || code === 127) return true;
-  }
-  return false;
 }
 
 export function parsePatch(args: Record<string, unknown>): Patch {
   if (!args.files || typeof args.files !== 'object' || Array.isArray(args.files)) throw new Error('files is required');
   const files = args.files as Record<string, string>;
-  if (
-    !Object.keys(files).length ||
-    Object.keys(files).length > 20 ||
-    Buffer.byteLength(JSON.stringify(files)) > 512 * 1024
-  )
-    throw new Error('Provide 1–20 source files, at most 512 KiB total.');
+  if (!Object.keys(files).length || Object.keys(files).length > 5 || JSON.stringify(files).length > 64000)
+    throw new Error('Provide 1–5 source files, at most 64K total; split larger changes.');
   for (const [file, text] of Object.entries(files)) {
     sourcePath(file);
     if (file === 'src/cli/resources/host-changes.ts')
       throw new Error('The host-change approval controller cannot be edited by capability patches.');
-    if (typeof text !== 'string' || invalidSourceText(text)) throw new Error('Source must be text.');
+    if (typeof text !== 'string' || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text))
+      throw new Error('Source must be text.');
   }
-  if (!Array.isArray(args.tests) || !args.tests.length || args.tests.length > 10)
-    throw new Error('Provide 1–10 relevant TypeScript/Python test paths.');
+  if (!Array.isArray(args.tests) || !args.tests.length || args.tests.length > 5)
+    throw new Error('Provide 1–5 relevant src test paths.');
   const tests = args.tests.map(sourcePath);
-  if (
-    tests.some(
-      (test) =>
-        !(test.startsWith('src/') && test.endsWith('.test.ts')) &&
-        !/^tools\/gdrive_(?:broker|assistant)_test\.py$/.test(test),
-    )
-  )
-    throw new Error('Tests must be allowlisted host .test.ts or integration _test.py files.');
-  if (
-    typeof args.summary !== 'string' ||
-    !args.summary.trim() ||
-    invalidSourceText(args.summary) ||
-    args.summary.length > 200
-  )
+  if (tests.some((test) => !test.startsWith('src/') || !test.endsWith('.test.ts')))
+    throw new Error('Tests must be host .test.ts files.');
+  if (typeof args.summary !== 'string' || !args.summary.trim() || args.summary.length > 200)
     throw new Error('Provide a summary of at most 200 characters.');
   return { files, tests, summary: args.summary };
 }
@@ -104,7 +71,7 @@ async function readSource(file: string): Promise<string | null> {
   try {
     if ((await fs.lstat(target)).isSymbolicLink()) throw new Error('Symlinked source files are rejected.');
     const text = await fs.readFile(target, 'utf8');
-    if (Buffer.byteLength(text) > 512 * 1024) throw new Error('Source exceeds 512 KiB.');
+    if (text.length > 64000) throw new Error('Source exceeds 64K.');
     return text;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
@@ -113,14 +80,7 @@ async function readSource(file: string): Promise<string | null> {
 }
 
 async function snapshot(directory: string) {
-  for (const name of [
-    'src',
-    'tools',
-    'container/agent-runner/src',
-    'package.json',
-    'tsconfig.json',
-    'vitest.config.ts',
-  ]) {
+  for (const name of ['src', 'container/agent-runner/src', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
     const target = path.join(directory, name);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.cp(path.join(root, name), target, { recursive: true });
@@ -137,17 +97,22 @@ async function patchDiff(directory: string, files: Record<string, string>) {
     await execute('git', ['-C', directory, 'add', '-N', '--', file]);
   }
   const { stdout } = await execute('git', ['-C', directory, 'diff', '--', ...Object.keys(files)]);
-  if (!stdout || Buffer.byteLength(stdout) > 512 * 1024)
+  if (!stdout || stdout.length > 1800)
     throw new Error(
-      'Patch must be nonempty and at most 512 KiB; full immutable review is available before exact-digest approval.',
+      'Patch must be nonempty and fit an exact Telegram approval (1800 characters); split larger changes.',
     );
   return stdout;
 }
 
-async function isolatedCheck(directory: string, image: string, command: string[]) {
+async function checkPatch(directory: string, tests: string[]) {
+  await fs.writeFile(
+    path.join(directory, 'check.cjs'),
+    'const {execFileSync}=require("node:child_process"); for(const args of [["node_modules/typescript/bin/tsc","--noEmit"],["node_modules/vitest/vitest.mjs","run","--configLoader","runner","--cache=false",...process.argv.slice(2)]]) execFileSync(process.execPath,args,{stdio:"inherit"});',
+  );
+  await fs.chmod(directory, 0o755);
   const name = `pa-check-${randomUUID()}`;
   try {
-    return await execute(
+    const result = await execute(
       'docker',
       [
         'run',
@@ -178,54 +143,27 @@ async function isolatedCheck(directory: string, image: string, command: string[]
         '--workdir',
         '/lab',
         '--entrypoint',
-        command[0],
-        image,
-        ...command.slice(1),
+        'node',
+        CONTAINER_IMAGE,
+        'check.cjs',
+        ...tests,
       ],
       { timeout: 120000, maxBuffer: 262144 },
     );
-  } finally {
-    await execute('docker', ['rm', '-f', name]).catch(() => undefined);
-  }
-}
-
-async function checkPatch(directory: string, tests: string[]) {
-  const ts = tests.filter((t) => t.endsWith('.test.ts'));
-  const py = tests.filter((t) => t.endsWith('_test.py'));
-  await fs.writeFile(
-    path.join(directory, 'check.cjs'),
-    'const {execFileSync}=require("node:child_process"); const checks=[["node_modules/typescript/bin/tsc","--noEmit"]]; if(process.argv.length>2)checks.push(["node_modules/vitest/vitest.mjs","run","--configLoader","runner","--cache=false",...process.argv.slice(2)]);for(const args of checks)execFileSync(process.execPath,args,{stdio:"inherit"});',
-  );
-  await fs.chmod(directory, 0o755);
-  try {
-    const results = [await isolatedCheck(directory, CONTAINER_IMAGE, ['node', 'check.cjs', ...ts])];
-    if (py.length)
-      results.push(
-        await isolatedCheck(directory, 'nanoclaw-maintenance-python:3.13', [
-          'python',
-          '-B',
-          '-m',
-          'unittest',
-          ...py.map((t) => t.replaceAll('/', '.').slice(0, -3)),
-        ]),
-      );
-    return {
-      ok: true,
-      stdout: results
-        .map((r) => r.stdout)
-        .join('\n')
-        .slice(-16000),
-      stderr: results
-        .map((r) => r.stderr)
-        .join('\n')
-        .slice(-4000),
-    };
+    return { ok: true, stdout: result.stdout.slice(-12000), stderr: result.stderr.slice(-2000) };
   } catch (error) {
     const failure = error as Error & { stdout?: string; stderr?: string };
+    const details = [failure.stdout, failure.stderr]
+      .filter(Boolean)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .slice(-4000);
     throw new Error(
-      `Capability checks failed; live source unchanged.\n${[failure.stdout, failure.stderr].filter(Boolean).join('\n').slice(-4000)}`,
+      `Capability checks failed; live source was not changed.\n${details || failure.message.slice(-2000)}`,
       { cause: error },
     );
+  } finally {
+    await execute('docker', ['rm', '-f', name]).catch(() => undefined);
   }
 }
 
@@ -242,20 +180,17 @@ async function stage(args: Patch, ctx: CallerContext) {
     await snapshot(working);
     const diff = await patchDiff(working, args.files);
     const checks = await checkPatch(working, args.tests);
-    const digest = hash(JSON.stringify({ files: args.files, baseline, tests: args.tests, summary: args.summary }));
-    const draft: Draft = { ...args, format: 2, group: caller.agentGroupId, baseline, diff, digest };
+    const digest = hash(JSON.stringify({ files: args.files, baseline }));
+    const draft: Draft = { ...args, group: caller.agentGroupId, baseline, diff, digest };
     await fs.writeFile(path.join(directory, 'draft.json'), JSON.stringify(draft), { mode: 0o600 });
     await fs.rm(working, { recursive: true, force: true });
     return {
       id,
       digest,
-      diff: diff.length <= 1800 ? diff : undefined,
-      diff_sha256: hash(diff),
-      review: `ncl host-change-review --id ${id} --offset 0`,
+      diff,
       checks,
       summary: args.summary,
-      paths: Object.keys(args.files).sort(),
-      next: 'Read the complete immutable diff with host-change-review; request native approval with id, digest and diff_sha256. Activation is healthy only after independent restart checks.',
+      next: 'Send the diff and checks to the owner, then request host-change-apply with id, digest and this exact diff. Activation and service restart require approval.',
     };
   } catch (error) {
     await fs.rm(directory, { recursive: true, force: true });
@@ -269,32 +204,11 @@ function parseApproval(args: Record<string, unknown>) {
     !/^[a-f0-9-]{36}$/.test(args.id) ||
     typeof args.digest !== 'string' ||
     !/^[a-f0-9]{64}$/.test(args.digest) ||
-    !(
-      (typeof args.diff === 'string' && args.diff.length <= 1800) ||
-      (typeof args.diff_sha256 === 'string' && /^[a-f0-9]{64}$/.test(args.diff_sha256))
-    )
+    typeof args.diff !== 'string' ||
+    args.diff.length > 1800
   )
-    throw new Error('Provide immutable draft id, digest and exact diff or diff_sha256.');
-  if (
-    args.diff === undefined &&
-    (typeof args.summary !== 'string' ||
-      !args.summary.trim() ||
-      invalidSourceText(args.summary) ||
-      args.summary.length > 200 ||
-      !Array.isArray(args.paths) ||
-      args.paths.length < 1 ||
-      args.paths.length > 20 ||
-      args.paths.some((p) => typeof p !== 'string'))
-  )
-    throw new Error('Digest approval also requires the exact tested summary and changed paths for the review card');
-  return {
-    id: args.id,
-    digest: args.digest,
-    diff: args.diff as string | undefined,
-    diff_sha256: args.diff_sha256 as string | undefined,
-    summary: args.summary as string | undefined,
-    paths: args.paths as string[] | undefined,
-  };
+    throw new Error('Provide the tested draft id, digest and exact diff.');
+  return { id: args.id, digest: args.digest, diff: args.diff };
 }
 
 async function writeFiles(files: Record<string, string | null>) {
@@ -335,28 +249,10 @@ async function activateDraft(
   if (
     draft.group !== caller.agentGroupId ||
     draft.digest !== args.digest ||
-    (args.diff !== undefined ? draft.diff !== args.diff : hash(draft.diff) !== args.diff_sha256) ||
-    hash(
-      JSON.stringify(
-        draft.format === 2
-          ? { files: draft.files, baseline: draft.baseline, tests: draft.tests, summary: draft.summary }
-          : { files: draft.files, baseline: draft.baseline },
-      ),
-    ) !== args.digest
+    draft.diff !== args.diff ||
+    hash(JSON.stringify({ files: draft.files, baseline: draft.baseline })) !== args.digest
   )
     throw new Error('Approval does not match this immutable tested draft.');
-  if (
-    args.diff === undefined &&
-    (args.summary !== draft.summary ||
-      JSON.stringify([...(args.paths ?? [])].sort()) !== JSON.stringify(Object.keys(draft.files).sort()))
-  )
-    throw new Error('Approval summary or paths differ from the tested immutable draft');
-  try {
-    const activation = JSON.parse(await fs.readFile(path.join(drafts, args.id, 'activation.json'), 'utf8'));
-    if (activation.state) throw new Error('Draft already activated or attempted; stage a fresh draft');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
   parsePatch(draft);
   for (const [file, original] of Object.entries(draft.baseline))
     if ((await readSource(file)) !== original)
@@ -369,7 +265,6 @@ async function activateDraft(
   } finally {
     await fs.rm(trial, { recursive: true, force: true });
   }
-  await fs.mkdir(path.join(drafts, '.activation-lock'));
   try {
     await writeFiles(draft.files);
     await execute('node', [path.join(root, 'node_modules/typescript/bin/tsc')], {
@@ -384,48 +279,15 @@ async function activateDraft(
       timeout: 120000,
       maxBuffer: 262144,
     });
-    await fs.rmdir(path.join(drafts, '.activation-lock'));
     throw new Error('Activation failed and the previous source/build was restored.', { cause: error });
   }
-  const directory = path.join(drafts, args.id);
-  const unit = `nanoclaw-v2-${INSTALL_SLUG}.service`;
-  await fs.writeFile(
-    path.join(directory, 'activation.json'),
-    JSON.stringify({
-      state: 'built',
-      checked_at: new Date().toISOString(),
-      unit,
-      group: caller.agentGroupId,
-      baseline: draft.baseline,
-      candidate: draft.files,
-      old_pid: process.pid,
-    }),
-    { mode: 0o600 },
-  );
-  try {
-    await execute('systemd-run', [
-      '--user',
-      '--collect',
-      '--unit',
-      `pa-maintenance-${args.id}`,
-      '--property=Type=exec',
-      'python3',
-      path.join(root, 'tools/maintenance_supervisor.py'),
-      root,
-      args.id,
-    ]);
-  } catch (error) {
-    await writeFiles(draft.baseline);
-    await execute('node', [path.join(root, 'node_modules/typescript/bin/tsc')], { cwd: root, timeout: 120000 });
-    await fs.rmdir(path.join(drafts, '.activation-lock'));
-    throw new Error('Restart supervisor could not start; previous source/build restored.', { cause: error });
-  }
-  return {
-    id: args.id,
-    state: 'built',
-    healthy: false,
-    next: 'Independent supervisor will restart, smoke-test and roll back on failure. Read host-change-status for actual activation state.',
-  };
+  await fs.rename(path.join(drafts, args.id, 'draft.json'), path.join(drafts, args.id, 'applied.json'));
+  setTimeout(() => {
+    void restartAgentGroupContainers(caller.agentGroupId, 'approved capability patch').finally(() =>
+      process.kill(process.pid, 'SIGTERM'),
+    );
+  }, 10000).unref();
+  return { applied: true, id: args.id, summary: draft.summary, host_restart_in_seconds: 10 };
 }
 
 register({
@@ -452,69 +314,4 @@ register({
   access: 'approval',
   parseArgs: parseApproval,
   handler: apply,
-});
-
-register({
-  name: 'host-change-review',
-  access: 'open',
-  description: 'Read the immutable full tested diff in chunks before digest approval.',
-  parseArgs: (args) => {
-    if (
-      typeof args.id !== 'string' ||
-      !/^[a-f0-9-]{36}$/.test(args.id) ||
-      (args.offset !== undefined &&
-        ((typeof args.offset !== 'string' && typeof args.offset !== 'number') ||
-          !Number.isSafeInteger(Number(args.offset)) ||
-          Number(args.offset) < 0))
-    )
-      throw new Error('Invalid draft id/offset');
-    return { id: args.id, offset: Number(args.offset ?? 0) };
-  },
-  handler: async (args, ctx) => {
-    const caller = await assistant(ctx);
-    const draft: Draft = JSON.parse(await fs.readFile(path.join(drafts, args.id, 'draft.json'), 'utf8'));
-    if (draft.group !== caller.agentGroupId) throw new Error('Draft not found');
-    if (args.offset > draft.diff.length) throw new Error('offset exceeds diff length');
-    const end = Math.min(args.offset + 16000, draft.diff.length);
-    return {
-      id: args.id,
-      digest: draft.digest,
-      diff_sha256: hash(draft.diff),
-      summary: draft.summary,
-      tests: draft.tests,
-      offset: args.offset,
-      diff: draft.diff.slice(args.offset, end),
-      next_offset: end < draft.diff.length ? end : null,
-    };
-  },
-});
-register({
-  name: 'host-change-status',
-  access: 'open',
-  description: 'Read actual restart/health/rollback state, not draft success.',
-  parseArgs: (args) => {
-    if (typeof args.id !== 'string' || !/^[a-f0-9-]{36}$/.test(args.id)) throw new Error('Invalid draft id');
-    return { id: args.id };
-  },
-  handler: async (args, ctx) => {
-    const caller = await assistant(ctx);
-    const draft: Draft = JSON.parse(await fs.readFile(path.join(drafts, args.id, 'draft.json'), 'utf8'));
-    if (draft.group !== caller.agentGroupId) throw new Error('Draft not found');
-    try {
-      const value = JSON.parse(await fs.readFile(path.join(drafts, args.id, 'activation.json'), 'utf8'));
-      return {
-        id: args.id,
-        state: value.state,
-        healthy: value.state === 'healthy',
-        checked_at: value.checked_at,
-        error: value.error ?? null,
-      };
-    } catch (error) {
-      return {
-        id: args.id,
-        state: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'staged' : 'unavailable',
-        healthy: false,
-      };
-    }
-  },
 });

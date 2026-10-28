@@ -13,7 +13,7 @@ import {
   TASKS_SYSTEM_THREAD_ID,
 } from '../../db/sessions.js';
 import type { TaskUpdate } from '../../mailbox/index.js';
-import { taskTimezone, parseTaskContent } from '../../modules/scheduling/task-content.js';
+import { parseTaskContent } from '../../modules/scheduling/task-content.js';
 import {
   createScheduledTask,
   enforceRecurrenceLimit,
@@ -30,7 +30,6 @@ import { appendRunLog, deleteRunLog } from '../../modules/scheduling/run-log.js'
 import { formatTasksTable } from '../format-tasks.js';
 import type { CallerContext } from '../frame.js';
 import type { InboundMailbox } from '../../mailbox/index.js';
-import { cancelTaskSession, taskSessionCancelled } from '../../modules/scheduling/cancellation.js';
 import { isContainerRunning, killContainer } from '../../container-runner.js';
 
 type TaskStatus = 'pending' | 'paused';
@@ -117,7 +116,6 @@ function toOutput(session: ScopedSession, row: TaskRow) {
     status: row.status,
     process_after: row.processAfter,
     recurrence: row.recurrence,
-    timezone: content.timezone ?? null,
     prompt: content.prompt.length > 120 ? content.prompt.slice(0, 117) + '...' : content.prompt,
     has_script: content.script ? 1 : 0,
     origin_session_id: content.originSessionId, // which session created the task (null for CLI-created)
@@ -147,7 +145,6 @@ async function createTask(args: Record<string, unknown>, ctx: CallerContext) {
   if (!prompt) throw new Error('--prompt is required');
   const recurrence = normalizeNullableString(args.recurrence) ?? null;
   const script = normalizeNullableString(args.script) ?? null;
-  const selectedTimezone = taskTimezone(args.timezone);
   const prepared = prepareScheduledTask({
     name: str(args.name),
     prompt,
@@ -155,8 +152,7 @@ async function createTask(args: Record<string, unknown>, ctx: CallerContext) {
     processAfter: str(args.process_after),
     script,
     dangerouslyOverrideRecurrenceLimit: bool(args.dangerously_override_recurrence_limit),
-    timezone: selectedTimezone ?? (await resolveGroupTimezone(group)),
-    taskTimezone: selectedTimezone ?? undefined,
+    timezone: await resolveGroupTimezone(group),
   });
   const { session, row } = await createScheduledTask(group, prepared, {
     originSessionId: ctx.caller === 'agent' ? ctx.sessionId : null,
@@ -257,8 +253,6 @@ async function getTask(args: Record<string, unknown>, ctx: CallerContext) {
     const found = await withInbound(session, (db) => {
       const row = selectTask(db, id);
       if (!row) return undefined;
-      if (taskSessionCancelled(session.id))
-        throw new Error('Task series was cancelled; create a new task to restart it');
       const seriesKey = row.seriesId ?? row.id;
       const stats = seriesStats(db, seriesKey);
       const content = parseTaskContent(row.content);
@@ -344,35 +338,17 @@ async function updateTaskCommand(args: Record<string, unknown>, ctx: CallerConte
   // recurrence-limit check.
   let ownerGroup: string | undefined;
   let currentScript: string | null = null;
-  let currentTimezone: string | undefined;
-  let currentRecurrence: string | null = null;
-  const selectedTimezone = taskTimezone(args.timezone);
-  if (selectedTimezone !== undefined) update.timezone = selectedTimezone;
-  if (args.process_after !== undefined || recurrence !== undefined || selectedTimezone !== undefined) {
+  if (args.process_after !== undefined || recurrence !== undefined) {
     for (const session of await selectedSessions(args, ctx)) {
       const row = await withInbound(session, (db) => selectTask(db, id));
       if (row) {
         ownerGroup = session.agent_group_id;
-        const content = parseTaskContent(row.content);
-        currentScript = content.script;
-        currentTimezone = content.timezone;
-        currentRecurrence = row.recurrence;
+        currentScript = parseTaskContent(row.content).script;
         break;
       }
     }
   }
-  const groupTimezone = ownerGroup ? await resolveGroupTimezone(ownerGroup) : TIMEZONE;
-  const tz = selectedTimezone === undefined ? (currentTimezone ?? groupTimezone) : (selectedTimezone ?? groupTimezone);
-  const effectiveRecurrence = recurrence === undefined ? currentRecurrence : recurrence;
-  if (selectedTimezone !== undefined && args.process_after === undefined && effectiveRecurrence) {
-    update.processAfter = prepareScheduledTask({
-      prompt: 'timezone update',
-      recurrence: effectiveRecurrence,
-      timezone: tz,
-      script: script === undefined ? currentScript : script,
-      dangerouslyOverrideRecurrenceLimit: bool(args.dangerously_override_recurrence_limit),
-    }).processAfter;
-  }
+  const tz = ownerGroup ? await resolveGroupTimezone(ownerGroup) : TIMEZONE;
 
   if (args.process_after !== undefined) update.processAfter = parseProcessAfter(args.process_after, tz);
   if (recurrence !== undefined) {
@@ -398,16 +374,11 @@ async function updateTaskCommand(args: Record<string, unknown>, ctx: CallerConte
 async function cancelTaskCommand(args: Record<string, unknown>, ctx: CallerContext) {
   const id = bool(args.all) ? undefined : taskId(args);
   let touched = 0;
-  for (const session of await selectedSessions(args, ctx, true)) {
-    const thread = (await getSession(session.id))?.thread_id;
-    const dedicated = thread && isTaskThread(thread);
-    const matched = await withInbound(session, (mailbox) =>
-      id ? !!mailbox.getTask(id) : !!mailbox.getTask(thread?.slice(`${TASKS_SYSTEM_THREAD_ID}:`.length) ?? ''),
-    );
-    if (dedicated && matched) cancelTaskSession(session.id);
+  for (const session of await selectedSessions(args, ctx)) {
     const changed = (await withInbound(session, (mailbox) => mailbox.cancelTask(id))) ?? 0;
-    touched += changed || (dedicated && matched ? 1 : 0);
-    if (dedicated && matched) killContainer(session.id, 'task-cancelled');
+    touched += changed;
+    const thread = (await getSession(session.id))?.thread_id;
+    if (changed && thread && isTaskThread(thread)) killContainer(session.id, 'task-cancelled');
   }
   if (id && !touched) throw new Error(`no live task matched: ${id}`);
   return id ? { series_id: id, touched } : { cancelled: touched };
@@ -426,8 +397,6 @@ async function runTaskCommand(args: Record<string, unknown>, ctx: CallerContext)
     const fired = await withInbound(session, async (db) => {
       const row = selectTask(db, id);
       if (!row) return undefined;
-      if (taskSessionCancelled(session.id))
-        throw new Error('Task series was cancelled; create a new task to restart it');
       const seriesKey = row.seriesId ?? row.id;
       const rowId = makeTaskId(`${seriesKey}-run`);
       // recurrence=NULL is load-bearing: a run-now row must not be re-armed by
@@ -470,7 +439,6 @@ registerResource({
       updatable: true,
     },
     { name: 'recurrence', type: 'string', description: 'Optional cron expression.', updatable: true },
-    { name: 'timezone', type: 'string', description: 'IANA timezone; none restores group default.', updatable: true },
     { name: 'prompt', type: 'string', description: 'Task prompt.', required: true, updatable: true },
     { name: 'script', type: 'string', description: 'Optional pre-task bash script.', updatable: true },
   ],
@@ -534,7 +502,6 @@ registerResource({
         `the user explicitly confirmed they want an ungated frequent task.\n\n` +
         `Failure backoff: a script that ERRORS repeatedly backs the series off (2,4,8,…60 min between fires; each errored fire counts as a failed run); after 8 consecutive failures the series is auto-paused with a note in its run log — fix the script, then \`ncl tasks resume <id>\`. A deliberate wakeAgent=false is a normal run and never backs off. \`ncl tasks get <id>\` shows failed_runs and the run log.`,
       args: [
-        { name: 'timezone', type: 'string', description: 'IANA timezone for this task, e.g. Asia/Jerusalem.' },
         {
           name: 'name',
           type: 'string',
@@ -608,11 +575,6 @@ registerResource({
       access: 'open',
       description: 'Update a live task by series id.',
       args: [
-        {
-          name: 'timezone',
-          type: 'string',
-          description: 'IANA timezone; none restores group default. Recomputes next cron run.',
-        },
         { name: 'id', type: 'string', description: 'Task series id.', required: true },
         { name: 'prompt', type: 'string', description: 'Replace the task prompt.' },
         { name: 'process_after', type: 'string', description: 'New next-run time (ISO 8601 or naive local).' },

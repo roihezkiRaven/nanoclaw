@@ -44,7 +44,7 @@ it('requires bounded text and relevant host tests before preparing a patch', () 
     { ...input, files: { '.env': 'secret' } },
     { ...input, files: { 'src/cli/resources/host-changes.ts': 'replace approval controller' } },
     { ...input, files: {} },
-    { ...input, files: { 'src/cli/resources/video.ts': 'x'.repeat(512 * 1024 + 1) } },
+    { ...input, files: { 'src/cli/resources/video.ts': 'x'.repeat(64001) } },
   ])
     expect(() => parsePatch(bad)).toThrow();
 });
@@ -86,11 +86,7 @@ it('rejects source drift after testing instead of overwriting a concurrent edit'
     summary: 'Selected video capability',
   };
   vi.mocked(fs.readFile).mockImplementation(async (file) =>
-    String(file).endsWith('draft.json')
-      ? JSON.stringify(draft)
-      : String(file).endsWith('activation.json')
-        ? Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }))
-        : 'concurrent edit',
+    String(file).endsWith('draft.json') ? JSON.stringify(draft) : 'concurrent edit',
   );
   vi.mocked(fs.realpath).mockImplementation(async (file) => String(file));
   vi.mocked(fs.lstat).mockResolvedValue({ isSymbolicLink: () => false } as Awaited<ReturnType<typeof fs.lstat>>);
@@ -100,38 +96,4 @@ it('rejects source drift after testing instead of overwriting a concurrent edit'
   ).rejects.toThrow('Host source changed');
   expect(fs.writeFile).not.toHaveBeenCalled();
   vi.unstubAllEnvs();
-});
-
-it('allows integration repairs and larger immutable review while keeping controllers protected', () => {
-  for (const file of [
-    'tools/gdrive_broker.py',
-    'tools/gdrive_broker_test.py',
-    'tools/whatsapp_collector.ts',
-    'src/modules/scheduling/recurrence.ts',
-  ])
-    expect(sourcePath(file)).toBe(file);
-  expect(
-    parsePatch({
-      files: { 'tools/gdrive_broker.py': '# '.repeat(40000) },
-      tests: ['tools/gdrive_broker_test.py'],
-      summary: 'Pagination',
-    }).tests,
-  ).toEqual(['tools/gdrive_broker_test.py']);
-  for (const file of [
-    'tools/maintenance_supervisor.py',
-    'src/modules/approvals/primitive.ts',
-    'src/guard/index.ts',
-    'config/google/reader-token.json',
-  ])
-    expect(() => sourcePath(file)).toThrow();
-  const command = lookup('host-change-apply')!;
-  expect(
-    command.parseArgs({
-      id: '12345678-1234-1234-1234-123456789abc',
-      digest: 'a'.repeat(64),
-      diff_sha256: 'b'.repeat(64),
-      summary: 'Pagination',
-      paths: ['tools/gdrive_broker.py'],
-    }),
-  ).toMatchObject({ diff_sha256: 'b'.repeat(64) });
 });

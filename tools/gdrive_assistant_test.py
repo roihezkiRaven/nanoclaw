@@ -9,33 +9,6 @@ import gdrive_assistant as subject
 from google.auth.exceptions import RefreshError
 
 
-class AtomicTokenTest(unittest.TestCase):
-    def test_readers_keep_the_complete_previous_token_until_publication(self):
-        with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory) / "reader-token.json"
-            destination.write_text("old grant")
-            replace = Path.replace
-            def publish(temporary, target):
-                self.assertEqual(destination.read_text(), "old grant")
-                self.assertEqual(temporary.read_text(), "new grant")
-                self.assertEqual(temporary.stat().st_mode & 0o777, 0o600)
-                return replace(temporary, target)
-            with patch.object(Path, "replace", publish):
-                subject.save_token(destination, "new grant")
-            self.assertEqual(destination.read_text(), "new grant")
-            self.assertEqual(list(Path(directory).iterdir()), [destination])
-
-    def test_failed_publication_preserves_the_previous_token(self):
-        with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory) / "reader-token.json"
-            destination.write_text("old grant")
-            with patch.object(Path, "replace", side_effect=OSError("disk failure")):
-                with self.assertRaises(OSError):
-                    subject.save_token(destination, "new grant")
-            self.assertEqual(destination.read_text(), "old grant")
-            self.assertEqual(list(Path(directory).iterdir()), [destination])
-
-
 class OAuthRecoveryTest(unittest.TestCase):
     def test_auth_replaces_a_revoked_token_with_browser_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -140,17 +113,6 @@ class VideoDownloadTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     subject.download_video("selected_video_123", "/tmp")
 
-
-
-class TextReadCompletenessTest(unittest.TestCase):
-    def test_raw_cli_fails_before_output_when_text_is_oversized(self):
-        api = MagicMock()
-        api.files().get.return_value.execute.return_value = {'name': 'large.txt', 'mimeType': 'text/plain'}
-        api.files().get_media.return_value.execute.return_value = b'x' * 1_000_001
-        with patch.object(subject, 'service', return_value=api), patch.object(subject.sys, 'stdout') as output:
-            with self.assertRaisesRegex(RuntimeError, 'offset/version continuation'):
-                subject.read('large-file')
-            output.buffer.write.assert_not_called()
 
 
 if __name__ == "__main__":

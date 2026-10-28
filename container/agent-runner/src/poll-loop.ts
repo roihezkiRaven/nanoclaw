@@ -300,6 +300,7 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
         thread_id: routing.threadId,
         content: JSON.stringify({ text: `Error: ${errMsg}` }),
       });
+
     } finally {
       clearCurrentReplyRoute();
       config.signal?.removeEventListener('abort', abortActiveQuery);
@@ -621,9 +622,7 @@ export async function processQuery(
             // content (error results excepted, below): mid-turn streaming is
             // the single content door. The result door's remaining job is
             // the nudge decision — see turnDelivered.
-            suppressDelivery:
-              midTurnCompleteDelivery &&
-              (event.isError !== true || midTurnSent > 0 || chatRowWrittenSince(turnStartSeq)),
+            suppressDelivery: midTurnCompleteDelivery,
             // "Did anything user-visible go out this turn?" — door
             // deliveries (midTurnSent) plus any chat row written since the
             // turn boundary (which also sees MCP send_message calls the

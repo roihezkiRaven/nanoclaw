@@ -1,4 +1,3 @@
-import { taskSessionCancelled } from '../scheduling/cancellation.js';
 /** Mail credentials stay on the host; experiments receive only their own files. */
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -30,7 +29,6 @@ const localTools = defineGuardedAction({
 
 async function precheck(content: Record<string, unknown>, session: Session): Promise<boolean> {
   try {
-    if (taskSessionCancelled(session.id)) throw new Error('Task cancelled; action has not run');
     const group = await getAgentGroup(session.agent_group_id);
     if (group?.folder !== 'personal-assistant') throw new Error('Available only to the personal assistant.');
     if (content.action === 'assistant_mail_send') mailPayload(content);
