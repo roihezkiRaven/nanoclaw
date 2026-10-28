@@ -12,11 +12,12 @@ import urllib.request
 GROUP = ""
 REPORTS = set()
 DESTINATIONS = {}
+PRODUCERS = []
 
 
 def configure(root):
     """Load deployment identities from host-only configuration, never Git."""
-    global GROUP, REPORTS, DESTINATIONS
+    global GROUP, REPORTS, DESTINATIONS, PRODUCERS
     settings = json.loads((root / "config/report-watchdog.json").read_text())
     group, reports, destinations = settings["group_id"], settings["reports"], settings["platform_destinations"]
     if not isinstance(group, str) or not group.startswith("ag-"):
@@ -30,6 +31,21 @@ def configure(root):
     if "slack" in destinations and (not isinstance(destinations["slack"], str) or not destinations["slack"].startswith("slack:C")):
         raise ValueError("Invalid watchdog Slack destination")
     GROUP, REPORTS, DESTINATIONS = group, set(reports), destinations
+    PRODUCERS = settings.get("knowledge_producers", [])
+    if not isinstance(PRODUCERS, list):
+        raise ValueError("Knowledge producers must be a list")
+    if any(not valid_producer(item) for item in PRODUCERS):
+        raise ValueError("Invalid knowledge producer configuration")
+
+
+def valid_producer(item):
+    return (isinstance(item, dict) and isinstance(item.get("group_id"), str)
+            and re.fullmatch(r"ag-[A-Za-z0-9-]+", item["group_id"])
+            and isinstance(item.get("series_id"), str)
+            and re.fullmatch(r"[A-Za-z0-9_-]+", item["series_id"])
+            and type(item.get("max_age_hours", 36)) in (int, float)
+            and 1 <= item.get("max_age_hours", 36) <= 1000)
+
 
 
 def timestamp(value):
@@ -174,6 +190,75 @@ def inspect(root, state, now, retry, alert, persist=lambda: None):
     return events
 
 
+def latest_producer_run(root, producer, now):
+    candidates = []
+    until = dt.datetime.fromtimestamp(now, dt.timezone.utc).isoformat()
+    with read_db(root / "data/v2.db") as central:
+        sessions = central.execute("SELECT id FROM sessions WHERE agent_group_id=? AND thread_id=?",
+                                   (producer["group_id"], "system:tasks:" + producer["series_id"])).fetchall()
+    for session in sessions:
+        path = root / "data/v2-sessions" / producer["group_id"] / session["id"] / "inbound.db"
+        if not path.exists():
+            continue
+        with read_db(path) as db:
+            row = db.execute("SELECT status,process_after FROM messages_in WHERE kind='task' AND series_id=? "
+                             "AND process_after<=? ORDER BY process_after DESC LIMIT 1",
+                             (producer["series_id"], until)).fetchone()
+            if row:
+                candidates.append(dict(row))
+    return max(candidates, key=lambda row: timestamp(row["process_after"]), default=None)
+
+
+def inspect_producer(producer, run, state, now, retry, alert, persist):
+    series = producer["series_id"]
+    record = state.setdefault("knowledge_producers", {}).setdefault(series, {})
+    if run and run["status"] in ("cancelled", "paused"):
+        return []
+    stale = not run or now - timestamp(run["process_after"]) > producer.get("max_age_hours", 36) * 3600
+    if run and run["status"] == "completed" and not stale:
+        record.clear()
+        return []
+    if run and run["status"] == "pending" and not stale:
+        return []
+    if not record.get("retried"):
+        return retry_producer(producer, record, now, retry, persist)
+    return alert_producer(series, record, now, alert, persist)
+
+
+def retry_producer(producer, record, now, retry, persist):
+    record.update(retried=True, retry_at=now)
+    persist()
+    try:
+        retry(producer["group_id"], producer["series_id"])
+    except Exception as error:
+        record["retry_error"] = type(error).__name__
+        persist()
+    return [{"series": producer["series_id"], "action": "producer_retry"}]
+
+
+def alert_producer(series, record, now, alert, persist):
+    day = dt.datetime.fromtimestamp(now, dt.timezone.utc).date().isoformat()
+    if now - record["retry_at"] < 1800 or record.get("alert_day") == day:
+        return []
+    record["alert_message_id"] = alert(f"Knowledge learning needs attention: {series} failed or is overdue after one bounded retry. "
+                                       "A successful wiki mirror does not prove research or ingestion succeeded; accepted knowledge is preserved.")
+    record["alert_day"] = day
+    persist()
+    return [{"series": series, "action": "producer_alert"}]
+
+
+def retry_knowledge_producer(root, group, series):
+    subprocess.run([str(root / "node_modules/.bin/tsx"), str(root / "src/cli/client.ts"),
+                    "tasks", "run", "--id", series, "--group", group],
+                   cwd=root, check=True, capture_output=True, timeout=20)
+
+
+def inspect_producers(root, state, now, retry, alert, persist):
+    return [event for producer in PRODUCERS
+            for event in inspect_producer(producer, latest_producer_run(root, producer, now),
+                                           state, now, retry, alert, persist)]
+
+
 def sync_properties(unit):
     result = subprocess.run(["systemctl", "--user", "show", unit, "-p", "Result", "-p", "ActiveState", "-p", "ExecMainExitTimestamp"],
                             check=True, capture_output=True, text=True, timeout=10,
@@ -276,6 +361,8 @@ def main():
     if (root / "data/knowledge-publication/engineering").exists():
         units.append("engineering-wiki-sync.service")
     events = inspect_knowledge_sync(state, now, alert, persist, publication=lambda unit: publication_status(root, unit), units=units)
+    events += inspect_producers(root, state, now,
+                                lambda group, series: retry_knowledge_producer(root, group, series), alert, persist)
     events += inspect(root, state, now, retry, alert, persist)
     save(path, state)
     print(json.dumps({"ok": True, "events": events}))

@@ -86,6 +86,49 @@ class DeliveryWatchdogTest(unittest.TestCase):
         self.assertFalse(watchdog.inspect_publication('unit',{},'day',self.start,status,self.alerts.append,lambda:None))
         self.assertFalse(self.alerts)
 
+    def test_failed_learning_job_is_independent_of_healthy_mirror_and_needs_no_chat_receipt(self):
+        p={"group_id":"ag-test-owner","series_id":"research","max_age_hours":36}
+        failed={"status":"failed","process_after":"2026-10-04T18:00:00Z"}
+        retries=[]
+        def inspect(run, seconds=0):
+            return watchdog.inspect_producer(p,run,self.state,self.start+seconds,
+                lambda g,s:retries.append((g,s)),self.alerts.append,lambda:None)
+        self.assertEqual(inspect(failed)[0]["action"],"producer_retry")
+        inspect(failed,60)
+        inspect({"status":"pending","process_after":"2026-10-04T18:01:00Z"},120)
+        self.assertEqual(len(retries),1)
+        self.assertFalse(self.alerts)
+        inspect(failed,1801)
+        inspect(failed,1802)
+        self.assertEqual(len(self.alerts),1)
+        inspect({"status":"completed","process_after":"2026-10-04T18:30:00Z"},1900)
+        self.assertFalse(self.state["knowledge_producers"]["research"])
+
+    def test_cancelled_learning_job_is_never_restarted(self):
+        p={"group_id":"ag-test-owner","series_id":"research"}
+        run={"status":"cancelled","process_after":"2026-10-01T18:00:00Z"}
+        self.assertFalse(watchdog.inspect_producer(p,run,self.state,self.start,
+            lambda *args:self.retries.append(args),self.alerts.append,lambda:None))
+        self.assertFalse(self.retries+self.alerts)
+
+    def test_producer_probe_ignores_future_attempts_and_needs_no_outbound_database(self):
+        p={"group_id":"ag-test-owner","series_id":"research"}
+        with sqlite3.connect(self.root/"data/v2.db") as db:
+            db.execute("UPDATE sessions SET thread_id='system:tasks:research'")
+        for id,status,stamp in [("old","completed","2026-10-03T18:00:00Z"),
+                                 ("failed","failed","2026-10-04T17:00:00Z"),
+                                 ("future","pending","2026-10-05T17:00:00Z")]:
+            self.inbound.execute("INSERT INTO messages_in VALUES (?,?,?,?,?)",(id,"research",stamp,status,"task"))
+        self.inbound.commit()
+        self.assertEqual(watchdog.latest_producer_run(self.root,p,self.start)["status"],"failed")
+
+    def test_producer_configuration_cannot_escape_session_root(self):
+        path=self.root/'config/report-watchdog.json'
+        config=json.loads(path.read_text())
+        config['knowledge_producers']=[{'group_id':'../../private','series_id':'research'}]
+        path.write_text(json.dumps(config))
+        with self.assertRaises(ValueError):watchdog.configure(self.root)
+
     def test_failed_sync_retries_once_and_alerts_without_using_the_model(self):
         properties = lambda unit: {"Result": "exit-code", "ActiveState": "failed", "ExecMainExitTimestamp": ""}
         for _ in range(2):
