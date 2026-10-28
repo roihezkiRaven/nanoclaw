@@ -243,6 +243,23 @@ class QualityTests(unittest.TestCase):
             a['canonical_fact']='Access is working.'
             self.assertTrue(quality.updated_claim_errors(root,'source-id',a))
 
+    def test_source_records_cannot_be_appended_to_scalar_metadata(self):
+        from pathlib import Path
+        text='---\nsources: []\nstatus_evidence_date: 2026-10-26  - id: source\n  - id: another\n---\nTask'
+        errors=quality.metadata_errors(Path('tasks/a.md'),text,{'status_evidence_date':'2026-10-26  - id: source'})
+        self.assertEqual(len(errors),2)
+        valid='---\nsources:\n  - id: source\nstatus_evidence_date: 2026-10-26\n---\nTask'
+        self.assertFalse(quality.metadata_errors(Path('tasks/a.md'),valid,{'status_evidence_date':'2026-10-26'}))
+
+    def test_review_date_must_be_a_real_calendar_date(self):
+        from pathlib import Path
+        self.assertTrue(quality.metadata_errors(Path('tasks/a.md'),'Task',{'last_reviewed':'2026-02-30'}))
+
+    def test_task_updates_cannot_repeat_the_same_dated_status(self):
+        p=Path('tasks/a.md');head='## Status update — reviewed 2026-10-26'
+        self.assertTrue(quality.page_quality_errors(p,head+'\nOld\n'+head+'\nRepeated',{}))
+        self.assertFalse(quality.page_quality_errors(p,head+'\nOld\n## Status update — reviewed 2026-10-28\nNew',{}))
+
 
 if __name__ == "__main__":
     unittest.main()
