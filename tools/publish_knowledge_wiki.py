@@ -187,7 +187,8 @@ def publication_coverage(state):
     pending = value.get('pending', [])
     return {'source_inventory': {key: value.get(key) for key in
             ['checked_at', 'complete', 'eligible_sources', 'pending_sources']},
-            'oldest_pending_revision': min((p['modifiedTime'] for p in pending), default=None)}
+            'oldest_pending_revision': min((p['modifiedTime'] for p in pending), default=None),
+            'oldest_pending_since': min((p['pending_since'] for p in pending if p.get('pending_since')), default=None)}
 
 
 def promote_snapshot(stage, destination):

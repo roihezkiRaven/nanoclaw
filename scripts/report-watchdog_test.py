@@ -81,6 +81,11 @@ class DeliveryWatchdogTest(unittest.TestCase):
         watchdog.inspect_knowledge_sync(self.state,self.start,self.alerts.append,lambda:None,properties,self.retries.append,fresh)
         self.assertTrue(all(not r for r in self.state['knowledge_sync'].values()))
 
+    def test_newly_discovered_historical_source_does_not_trigger_stale_queue_alert(self):
+        status={'mode':'healthy','oldest_pending_revision':'2026-09-01T00:00:00Z','oldest_pending_since':'2026-10-04T17:00:00Z'}
+        self.assertFalse(watchdog.inspect_publication('unit',{},'day',self.start,status,self.alerts.append,lambda:None))
+        self.assertFalse(self.alerts)
+
     def test_failed_sync_retries_once_and_alerts_without_using_the_model(self):
         properties = lambda unit: {"Result": "exit-code", "ActiveState": "failed", "ExecMainExitTimestamp": ""}
         for _ in range(2):

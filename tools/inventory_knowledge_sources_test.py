@@ -59,6 +59,20 @@ class InventoryTests(unittest.TestCase):
             0,
         )
 
+    def test_queue_age_is_not_the_age_of_a_historical_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            state=Path(d)/'state.json'
+            result={'checked_at':'2026-10-28T12:00:00Z','pending':[{'id':'source','modifiedTime':'2026-09-01T00:00:00Z'}]}
+            subject.stamp_pending(result,state)
+            self.assertEqual(result['pending'][0]['pending_since'],result['checked_at'])
+            state.write_text(json.dumps(result))
+            later={**result,'checked_at':'2026-10-29T12:00:00Z','pending':[{'id':'source','modifiedTime':'2026-09-01T00:00:00Z'}]}
+            subject.stamp_pending(later,state)
+            self.assertEqual(later['pending'][0]['pending_since'],'2026-10-28T12:00:00Z')
+            later['pending'][0]['modifiedTime']='2026-10-29T11:00:00Z'
+            subject.stamp_pending(later,state)
+            self.assertEqual(later['pending'][0]['pending_since'],later['checked_at'])
+
     def test_recursive_listing_follows_empty_provider_pages_and_continuations(self):
         api = MagicMock()
         seen = []

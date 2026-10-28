@@ -181,11 +181,21 @@ def arguments():
     return args
 
 
+def stamp_pending(result, state):
+    """Measure queue age from observation, separately from the source event/revision."""
+    previous = json.loads(state.read_text()) if state.exists() else {}
+    prior = {(p['id'], p['modifiedTime'], p.get('pending_reason')): p for p in previous.get('pending', [])}
+    for item in result.get('pending', []):
+        old = prior.get((item['id'], item['modifiedTime'], item.get('pending_reason')))
+        item['pending_since'] = (old.get('pending_since', previous.get('checked_at')) if old else None) or result['checked_at']
+    return result
+
+
 def main():
     args = arguments()
     checkpoint = json.loads((args.wiki / "ingestion.json").read_text()).get("files", {})
     api = service("reader", False)
-    result = report(*inventory(api, args.root_folder), checkpoint)
+    result = stamp_pending(report(*inventory(api, args.root_folder), checkpoint), args.state)
     if args.cache_dir:
         cache_sources(api, result["files"], args.cache_dir)
     args.state.parent.mkdir(parents=True, exist_ok=True)

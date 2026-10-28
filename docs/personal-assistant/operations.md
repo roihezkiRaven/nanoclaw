@@ -392,3 +392,8 @@ specific false-success pattern and retains accepted fact assessments. Model
 reasoning is configured separately from these host checks; higher effort alone
 is not a quality gate. Private source audits and before/after snapshots stay in
 ignored working storage, never in Git.
+
+Source-lag alerts measure `pending_since`, retained per source revision from its
+first observed pending inventory. The source's own modification date remains an
+evidence/freshness field; newly discovered historical notes must not immediately
+trigger a multi-week queue-delay alarm. A changed revision starts a new wait.
