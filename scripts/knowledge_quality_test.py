@@ -255,6 +255,11 @@ class QualityTests(unittest.TestCase):
         from pathlib import Path
         self.assertTrue(quality.metadata_errors(Path('tasks/a.md'),'Task',{'last_reviewed':'2026-02-30'}))
 
+    def test_task_updates_cannot_repeat_the_same_dated_status(self):
+        p=Path('tasks/a.md');head='## Status update — reviewed 2026-10-26'
+        self.assertTrue(quality.page_quality_errors(p,head+'\nOld\n'+head+'\nRepeated',{}))
+        self.assertFalse(quality.page_quality_errors(p,head+'\nOld\n## Status update — reviewed 2026-10-28\nNew',{}))
+
 
 if __name__ == "__main__":
     unittest.main()

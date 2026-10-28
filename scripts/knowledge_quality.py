@@ -115,6 +115,9 @@ def page_quality_errors(relative, text, meta):
     keys = re.findall(r'^([a-zA-Z_]+):', header, re.M)
     errors = [f'{relative}: duplicate frontmatter key: {key}' for key in set(keys) if keys.count(key) > 1]
     errors += metadata_errors(relative, text, meta)
+    if relative.parts[0] == 'tasks':
+        headings = re.findall(r'^## (?:Current status|Status update)[^\n]*', text, re.M)
+        errors += [f'{relative}: repeated task status section: {h}' for h in set(headings) if headings.count(h) > 1]
     errors += project_errors(relative, text, meta) + concept_errors(relative, text, meta) + navigation_errors(relative, text)
     templates = ('Historical backfill synthesis', 'Mentioned in the day’s technical discussion', "Mentioned in the day's technical discussion")
     if relative.parts[0] == 'whatsapp' and re.fullmatch(r'\d{4}-\d{2}-\d{2}.md', relative.name) and any(t in text for t in templates):
