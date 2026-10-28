@@ -3,6 +3,7 @@
 import json
 import hashlib
 import re
+from datetime import date
 
 
 def project_errors(relative, text, meta):
@@ -87,10 +88,33 @@ def navigation_errors(relative, text):
     return [f"{relative}: duplicate project navigation: {path}" for path in duplicate]
 
 
+def metadata_errors(relative, text, meta):
+    errors = []
+    for key in ('status_evidence_date', 'last_reviewed'):
+        if key not in meta:
+            continue
+        value = meta[key].strip("\"'")
+        try:
+            valid = date.fromisoformat(value).isoformat() == value
+        except ValueError:
+            valid = False
+        if not valid:
+            errors.append(f'{relative}: {key} must be a standalone ISO date')
+    current = None
+    header = text.split('---', 2)[1] if text.startswith('---\n') else ''
+    for line in header.splitlines():
+        if re.match(r'^[a-zA-Z_]+:', line):
+            current = line.split(':', 1)[0]
+        if re.match(r'^\s+- id:', line) and current != 'sources':
+            errors.append(f'{relative}: source record is outside the sources field')
+    return errors
+
+
 def page_quality_errors(relative, text, meta):
     header = text.split('---', 2)[1] if text.startswith('---\n') else ''
     keys = re.findall(r'^([a-zA-Z_]+):', header, re.M)
     errors = [f'{relative}: duplicate frontmatter key: {key}' for key in set(keys) if keys.count(key) > 1]
+    errors += metadata_errors(relative, text, meta)
     errors += project_errors(relative, text, meta) + concept_errors(relative, text, meta) + navigation_errors(relative, text)
     templates = ('Historical backfill synthesis', 'Mentioned in the day’s technical discussion', "Mentioned in the day's technical discussion")
     if relative.parts[0] == 'whatsapp' and re.fullmatch(r'\d{4}-\d{2}-\d{2}.md', relative.name) and any(t in text for t in templates):
