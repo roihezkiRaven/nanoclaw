@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 
 from gdrive_assistant import service
-from inventory_knowledge_sources import cache_source
+from inventory_knowledge_sources import cache_source, stamp_pending
 
 spec = importlib.util.spec_from_file_location(
     "knowledge_validator",
@@ -164,7 +164,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_-]{10,200}", args.archive_folder):
         parser.error("Invalid archive folder")
-    result = audit(args)
+    result = stamp_pending(audit(args), args.state)
     args.state.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.state.with_suffix(".tmp")
     temporary.write_text(json.dumps(result))

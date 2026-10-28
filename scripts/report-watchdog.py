@@ -207,7 +207,7 @@ def inspect_knowledge_sync(state, now, alert, persist, properties=sync_propertie
 def inspect_publication(unit, record, day, now, status, alert, persist):
     if status.get('mode') == 'degraded':
         return alert_degraded(unit, record, day, status, alert, persist)
-    oldest = status.get('oldest_pending_revision')
+    oldest = status.get('oldest_pending_since', status.get('oldest_pending_revision'))
     if oldest and now - timestamp(oldest) > 26 * 3600:
         return alert_source_lag(unit, record, day, alert, persist)
     record.clear()
