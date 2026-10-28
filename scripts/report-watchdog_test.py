@@ -70,6 +70,17 @@ class DeliveryWatchdogTest(unittest.TestCase):
                                          properties, self.retries.append, lambda unit: {"mode": "healthy"})
         self.assertTrue(all(not record for record in self.state["knowledge_sync"].values()))
 
+    def test_source_lag_alert_is_independent_of_successful_mirroring(self):
+        properties = lambda unit: {"Result":"success", "ActiveState":"inactive", "ExecMainExitTimestamp":"Sun 2026-10-04 18:00:00 UTC"}
+        old = lambda unit: {"mode":"healthy", "oldest_pending_revision":"2026-10-02T18:00:00Z"}
+        for _ in range(2):
+            watchdog.inspect_knowledge_sync(self.state,self.start,self.alerts.append,lambda:None,properties,self.retries.append,old)
+        self.assertEqual(len(self.alerts),2)
+        self.assertFalse(self.retries)
+        fresh = lambda unit: {"mode":"healthy", "oldest_pending_revision":"2026-10-04T17:00:00Z"}
+        watchdog.inspect_knowledge_sync(self.state,self.start,self.alerts.append,lambda:None,properties,self.retries.append,fresh)
+        self.assertTrue(all(not r for r in self.state['knowledge_sync'].values()))
+
     def test_failed_sync_retries_once_and_alerts_without_using_the_model(self):
         properties = lambda unit: {"Result": "exit-code", "ActiveState": "failed", "ExecMainExitTimestamp": ""}
         for _ in range(2):

@@ -42,7 +42,12 @@ jobs:
         run: |
           python3 scripts/validate_knowledge_wiki_test.py
           python3 scripts/report-watchdog_test.py
+          python3 scripts/knowledge_quality_test.py
           python3 -m unittest discover -s tools -p publish_knowledge_wiki_test.py
+          python3 -m unittest discover -s tools -p build_knowledge_navigation_test.py
+          python3 -m unittest discover -s tools -p inventory_knowledge_sources_test.py
+          python3 -m unittest discover -s tools -p wiki_links_test.py
+          python3 -m unittest discover -s tools -p audit_whatsapp_wiki_test.py
 
       - name: Host tests
         run: pnpm exec vitest run

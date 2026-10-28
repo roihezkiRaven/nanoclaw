@@ -1,0 +1,18 @@
+[Unit]
+Description=Publish the canonical AI Engineering concept wiki to Google Drive
+After=network-online.target gdrive-broker.service
+StartLimitIntervalSec=15min
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+TimeoutStartSec=20min
+Restart=on-failure
+RestartSec=60
+WorkingDirectory=/home/assistant/nanoclaw
+EnvironmentFile=/home/assistant/nanoclaw/.env
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/publish_knowledge_wiki.py --canonical-destination /home/assistant/nanoclaw/data/ai-engineering-wiki --build-navigation --source /home/assistant/nanoclaw/groups/personal-assistant/work/knowledge/ai-engineering/wiki --scope engineering --state-dir /home/assistant/nanoclaw/data/knowledge-publication/engineering --drive-folder ${AI_ENGINEERING_KNOWLEDGE_FOLDER_ID} --sync-state /home/assistant/nanoclaw/data/knowledge-publication/engineering/drive-sync.json
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/assistant/nanoclaw/data/ai-engineering-wiki /home/assistant/nanoclaw/groups/personal-assistant/work/knowledge/ai-engineering/wiki /home/assistant/nanoclaw/data/knowledge-publication /home/assistant/nanoclaw/config/google

@@ -350,3 +350,45 @@ Upload failures preserve checkpoints and the prior cache. The uploader has a
 to a three-start limit per 15 minutes. These retries recover transient failures;
 they cannot repair invalid source provenance or restore revoked credentials.
 All publication snapshots, originals, and status are private ignored runtime data.
+
+### Knowledge publication quality repair
+
+Install `scripts/knowledge_quality.py` beside `validate-knowledge-wiki.py` and
+copy both into maintenance groups as `knowledge_quality.py` and
+`knowledge-validator.py`. The publisher also requires
+`build_knowledge_navigation.py` and `wiki_links.py`. Do not deploy a validator
+without its companion module.
+
+The three publication units require the existing writer-folder variables plus
+`TIMELESS_SOURCE_ROOT_ID`, `WHATSAPP_SOURCE_ROOT_ID`, and
+`AI_ENGINEERING_KNOWLEDGE_FOLDER_ID` in the private environment file. These are
+approved-source/publication folder IDs, never credentials. Host reader OAuth
+caches source revisions under `data/knowledge-source-cache/{timeless,whatsapp}`;
+keep these folders outside every agent writable mount. State and last-good
+snapshots live under `data/knowledge-publication/<scope>` with restrictive
+permissions. Existing sync-state files preserve published page IDs.
+
+Seed separate scope-only draft directories at
+`data/knowledge-drafts/{timeless,whatsapp}` from the accepted graph, then change
+each writer's `timeless-wiki` additional mount to its own draft using the host
+`groups config` CLI and restart the idle writer. Allow-list only those exact
+knowledge directories for write access. Keep the owner's accepted graph mount
+read-only. This is an operator mount change, not a container self-grant.
+
+Install the updated Timeless/WhatsApp service files and the engineering service
+and timer, reload user systemd and enable the engineering timer. Run source
+inventory/audit and publication, inspect scope `status.json`, then rerun to
+verify stable IDs and zero unchanged-content uploads. Verify remote checksums
+against `wiki_links.exported_text`, not raw canonical Markdown: the Drive view
+intentionally removes metadata and resolves local links. Check watchdog behavior
+with injected alert/retry callbacks; do not send test owner notifications.
+
+The October 2026 RCA found that checkpoint equality was being treated as
+knowledge completeness, weekly/cross-project evidence was under-consolidated,
+indexes accumulated audit logs, and AI Engineering tasks explicitly produced
+versioned reports. A cheap-model replay also blanket-classified primary notes
+while passing structural validation. The regression contract now rejects that
+specific false-success pattern and retains accepted fact assessments. Model
+reasoning is configured separately from these host checks; higher effort alone
+is not a quality gate. Private source audits and before/after snapshots stay in
+ignored working storage, never in Git.

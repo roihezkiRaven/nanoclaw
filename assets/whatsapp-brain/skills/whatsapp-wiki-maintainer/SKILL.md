@@ -54,3 +54,22 @@ After each pass, append a concise operational entry to `log.md`. If no archive s
 Link every daily digest from its group index and every group index from `whatsapp/index.md`. Refresh generated coverage counts when the archive grows; never leave September-only navigation hiding newer digests. Record each newly processed source's `disposition`, `outputs`, and a source-specific `reason` in its checkpoint so fetches cannot be mistaken for completed ingestion.
 
 A no-record coverage check is `type: coverage-status`, not a daily digest or evidence of an empty current archive. A factual daily digest requires an exact source-backed group JID and nonempty sources; never use `cross-group` as its identity.
+
+
+Partition by both exact group JID and original message UTC date, not ingestion or
+upload date. Consolidate all contributing source revisions into that canonical
+group/day digest. Reprocess the whole affected day when a late batch arrives;
+do not replace its prior facts with only the latest batch. Record every source ID.
+Detect malformed JSONL and record any lossless parser normalization explicitly;
+never silently skip records and still claim complete ingestion. Captured daily-bot
+summaries may be derivative/truncated and must not count as independent evidence.
+
+A keyword list such as “tool mentioned; no benchmark” is not a substantive digest.
+Read each complete group/day and explain its specific mechanism, result, caveat
+or open question. A no-durable-items day can be one concise statement with
+provenance; do not manufacture eight empty headings. Never copy raw messages,
+participant identifiers or promotional invites. Checkpoint only after every
+represented group/day is durably assessed. Rebuild the durable concept layer
+when evidence changes; logs and daily digests remain supporting history.
+
+The writable `/workspace/extra/timeless-wiki` mount is a scope-only draft. The host freezes, independently validates, publishes and promotes accepted content. A successful local edit is not accepted publication.

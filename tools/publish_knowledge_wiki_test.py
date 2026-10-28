@@ -89,6 +89,15 @@ class PublicationTest(unittest.TestCase):
         self.assertEqual(self.publish()['mode'], 'degraded')
         self.assertNotIn('missing.md', self.uploads[-1]['whatsapp/index.md'])
 
+    def test_missing_published_concept_uses_visible_last_good_fallback(self):
+        concept = self.page('whatsapp/brain/concepts/history.md', META)
+        self.publish()
+        concept.unlink()
+        status = self.publish()
+        self.assertEqual(status['mode'], 'degraded')
+        self.assertIn('whatsapp/brain/concepts/history.md', self.uploads[-1])
+        self.assertTrue(any('disappeared' in error for error in status['validation_errors']))
+
     def test_invalid_daily_cannot_be_hidden_by_fallback(self):
         self.publish()
         self.page('whatsapp/group/2026-10-24.md', DAILY.replace('123456789@g.us', 'unknown'))
@@ -150,6 +159,35 @@ class PublicationTest(unittest.TestCase):
         self.root.mkdir()
         with self.assertRaisesRegex(ValueError, 'No knowledge pages'):
             self.publish()
+
+    def test_only_successful_frozen_snapshot_is_promoted(self):
+        destination=self.root.parent/'accepted'
+        page=self.root/'whatsapp/group/2026-10-23.md'
+        def upload(stage):
+            self.upload(stage)
+            page.write_text('concurrent unvalidated edit')
+        publisher.publish(self.root,self.state,'whatsapp',upload,destination=destination)
+        self.assertEqual((destination/'whatsapp/group/2026-10-23.md').read_text(),DAILY)
+        self.assertEqual(page.read_text(),'concurrent unvalidated edit')
+        previous=(destination/'whatsapp/group/2026-10-23.md').read_bytes()
+        with self.assertRaises(ValueError):
+            publisher.publish(self.root,self.state,'whatsapp',self.upload,destination=destination)
+        self.assertEqual((destination/'whatsapp/group/2026-10-23.md').read_bytes(),previous)
+
+    def test_promotion_cannot_follow_destination_symlinks(self):
+        stage=self.root.parent/'stage';stage.mkdir();(stage/'page.md').write_text('accepted')
+        destination=self.root.parent/'accepted';destination.mkdir()
+        outside=self.root.parent/'outside';outside.mkdir()
+        (destination/'page.md').symlink_to(outside/'private.md')
+        with self.assertRaisesRegex(ValueError,'escapes'):
+            publisher.promote_snapshot(stage,destination)
+        self.assertFalse((outside/'private.md').exists())
+
+    def test_accepted_fact_assessment_cannot_be_downgraded(self):
+        before={'source':{'project_assessments':[{'project':'projects/a.md','outcome':'updated'}]}}
+        after={'source':{'project_assessments':[{'project':'projects/a.md','outcome':'unresolved'}]}}
+        self.assertTrue(publisher.retained_assessment_errors(self.root,before,after))
+        self.assertFalse(publisher.retained_assessment_errors(self.root,before,before))
 
 
 if __name__ == '__main__':
