@@ -397,3 +397,13 @@ Source-lag alerts measure `pending_since`, retained per source revision from its
 first observed pending inventory. The source's own modification date remains an
 evidence/freshness field; newly discovered historical notes must not immediately
 trigger a multi-week queue-delay alarm. A changed revision starts a new wait.
+
+The private watchdog configuration can also declare established maintenance jobs
+in knowledge_producers: each entry has group_id, series_id, and max_age_hours
+(36 for daily jobs; 192 for weekly jobs). This checks producer execution
+separately from mirror success, without expecting chat delivery from silent
+maintenance tasks. It queues one bounded retry, preserves that retry state while
+work is pending, and alerts only if failure persists after a 30-minute grace
+period. Cancelled or paused work is never restarted. Configure only authorized
+maintenance series; report delivery monitoring remains separate. Job completion
+is still not a substitute for source coverage and semantic validation.
