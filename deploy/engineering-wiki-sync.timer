@@ -1,0 +1,10 @@
+[Unit]
+Description=Publish AI Engineering knowledge after the research and community passes
+
+[Timer]
+OnCalendar=*-*-* 18:45:00 UTC
+Persistent=true
+Unit=engineering-wiki-sync.service
+
+[Install]
+WantedBy=timers.target

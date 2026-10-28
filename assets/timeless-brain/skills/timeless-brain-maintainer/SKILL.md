@@ -47,3 +47,13 @@ Resolve every relative link from the containing file's directory. Weekly pages a
 Preserve every existing weekly snapshot when rebuilding the current week; never clear or replace the weekly directory. Keep historical snapshots linked from the brain index.
 
 Before reporting completion, run `python3 /workspace/agent/knowledge-validator.py /workspace/extra/timeless-wiki --scope timeless` and fix every error. Top-level metadata keys such as `title` must start at column one. Links from `brain/weekly/` to canonical project pages use `../../projects/<name>.md`, not `../projects/<name>.md`. If the validator is unavailable or fails, report the exact validation gap instead of claiming a successful rebuild.
+
+
+Maintain accumulated mechanisms, current decisions, dependencies and uncertainty;
+never replace knowledge with the latest few days of news. Prefer links to stable
+canonical concepts. The main overview should answer what matters now and why;
+meeting titles, source inventories and weekly logs belong behind evidence links.
+Do not repeat all tasks as active: completed, superseded and unverified tasks need
+separate treatment grounded in later project evidence. A source reference alone
+is not a source-to-project assessment. Surface unresolved consolidation and
+identity as gaps rather than silently ignoring internal/engineer weeklies.

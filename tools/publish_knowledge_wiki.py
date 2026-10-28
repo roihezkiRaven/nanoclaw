@@ -17,6 +17,8 @@ import sys
 import tempfile
 import zipfile
 
+from build_knowledge_navigation import build as build_navigation
+
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("knowledge_validator", ROOT / "scripts/validate-knowledge-wiki.py")
 validator = importlib.util.module_from_spec(spec)
@@ -117,39 +119,103 @@ def preserve_rejected(stage, state):
 def apply_safe_repairs(source, stage, state, originals, repairs):
     for relative in sorted({item["path"] for item in repairs}):
         path = source / relative
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != originals.get(relative):
+        observed = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+        if observed != originals.get(relative):
             continue
         backup = state / "repair-originals" / relative
         backup.parent.mkdir(parents=True, exist_ok=True)
-        if not backup.exists():
+        if path.exists() and not backup.exists():
             shutil.copyfile(path, backup)
+        path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".publication-tmp")
         shutil.copyfile(stage / relative, temporary)
         temporary.replace(path)
 
 
-def prepare(source, stage, state, scope):
+def retained_knowledge_errors(stage, state):
+    cache = state / 'last-good.zip'
+    if not cache.exists():
+        return []
+    with zipfile.ZipFile(cache) as archive:
+        previous = [name for name in archive.namelist() if name.endswith('.md')]
+        reviewed = json.loads(archive.read('ingestion.json')).get('files', {}) if 'ingestion.json' in archive.namelist() else {}
+    errors = [f'{name}: previously published knowledge disappeared; retain a redirect or reconcile it explicitly'
+              for name in previous if not (stage / name).is_file()]
+    current = json.loads((stage / 'ingestion.json').read_text()).get('files', {}) if (stage / 'ingestion.json').exists() else {}
+    errors += [f'{id}: previously reviewed source assessment was removed or downgraded' for id, item in reviewed.items()
+               if item.get('consolidation_version') == 2 and current.get(id, {}).get('consolidation_version') != 2]
+    errors += retained_assessment_errors(stage, reviewed, current)
+    return errors
+
+
+def retained_assessment_errors(stage, reviewed, current):
+    errors = []
+    for id, item in reviewed.items():
+        accepted = {a['project'] for a in item.get('project_assessments', []) if a.get('outcome') == 'updated'}
+        present = {a['project'] for a in current.get(id, {}).get('project_assessments', []) if a.get('outcome') == 'updated'}
+        errors += [f'{id}: accepted project fact assessment was downgraded: {p}' for p in accepted - present]
+    return errors
+
+
+def prepare(source, stage, state, scope, navigation=False, source_cache=None):
     copy_snapshot(source, stage, scope)
     originals = {p.relative_to(stage).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.rglob("*.md")}
     if not originals:
         raise ValueError("No knowledge pages available for publication")
+    navigation_paths = build_navigation(stage, scope, validator.frontmatter) if navigation else []
     repairs = repair_weekly_links(stage) if scope == "whatsapp" else []
-    errors = validator.validate(stage, scope)
+    errors = validator.validate(stage, scope, source_cache) + retained_knowledge_errors(stage, state)
     mode = "repaired" if repairs else "healthy"
     now = datetime.now(timezone.utc).isoformat()
     brain_time = now
     if errors:
         preserve_rejected(stage, state)
         brain_time = restore_synthesis(stage, state / "last-good.zip", scope)
-        remaining = validator.validate(stage, scope)
+        remaining = validator.validate(stage, scope, source_cache) + retained_knowledge_errors(stage, state)
         if remaining:
             raise ValueError("Fallback cannot make source data safe: " + "; ".join(remaining))
         mode = "degraded"
     return {"scope": scope, "mode": mode, "published_at": now, "brain_snapshot_at": brain_time,
-            "repairs": repairs, "validation_errors": errors, "pages": len(list(stage.rglob("*.md")))}, originals
+            "repairs": repairs, "navigation_paths": navigation_paths, "validation_errors": errors, "pages": len(list(stage.rglob("*.md")))}, originals
 
 
-def publish(source, state, scope, upload):
+def publication_coverage(state):
+    path = state / 'source-inventory.json'
+    if not path.exists():
+        return {}
+    value = json.loads(path.read_text())
+    pending = value.get('pending', [])
+    return {'source_inventory': {key: value.get(key) for key in
+            ['checked_at', 'complete', 'eligible_sources', 'pending_sources']},
+            'oldest_pending_revision': min((p['modifiedTime'] for p in pending), default=None)}
+
+
+def promote_snapshot(stage, destination):
+    """Expose only the validated, successfully uploaded snapshot to assistant readers."""
+    destination.mkdir(parents=True, exist_ok=True)
+    paths = sorted((p for p in stage.rglob('*') if p.is_file()),
+                   key=lambda p: (p.name == 'index.md', p.relative_to(stage).as_posix()))
+    targets = [(path, destination / path.relative_to(stage)) for path in paths]
+    if any(not target.resolve().is_relative_to(destination.resolve()) for _, target in targets):
+        raise ValueError('Canonical destination path escapes knowledge base')
+    for path, target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(target.suffix + '.accepted-tmp')
+        shutil.copyfile(path, temporary)
+        temporary.replace(target)
+
+
+def accept_publication(source, stage, state, originals, status, destination=None):
+    if destination is not None:
+        promote_snapshot(stage, destination)
+    cache_publication(stage, state, status)
+    if status['mode'] != 'degraded':
+        repairs = status['repairs'] + [{'path': p} for p in status['navigation_paths']]
+        apply_safe_repairs(source, stage, state, originals, repairs)
+    atomic_json(state / 'status.json', status)
+
+
+def publish(source, state, scope, upload, navigation=False, source_cache=None, destination=None):
     source, state = source.resolve(), state.resolve()
     if not source.is_dir() or state.is_relative_to(source):
         raise ValueError("Publication state must be outside an existing wiki")
@@ -160,12 +226,10 @@ def publish(source, state, scope, upload):
         with tempfile.TemporaryDirectory(prefix="candidate-", dir=state) as directory:
             stage = Path(directory)
             try:
-                status, originals = prepare(source, stage, state, scope)
+                status, originals = prepare(source, stage, state, scope, navigation, source_cache)
+                status.update(publication_coverage(state))
                 upload(stage)
-                cache_publication(stage, state, status)
-                if status["mode"] != "degraded":
-                    apply_safe_repairs(source, stage, state, originals, status["repairs"])
-                atomic_json(state / "status.json", status)
+                accept_publication(source, stage, state, originals, status, destination)
                 return status
             except Exception as error:
                 atomic_json(state / "status.json", {"scope": scope, "mode": "failed", "error": str(error)})
@@ -176,14 +240,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--scope", choices=("timeless", "whatsapp"), required=True)
+    parser.add_argument("--scope", choices=("timeless", "whatsapp", "engineering"), required=True)
     parser.add_argument("--drive-folder", required=True)
     parser.add_argument("--sync-state", type=Path, required=True)
+    parser.add_argument("--build-navigation", action="store_true")
+    parser.add_argument("--source-cache", type=Path)
+    parser.add_argument("--canonical-destination", type=Path)
     args = parser.parse_args()
     def upload(stage):
         subprocess.run([sys.executable, str(ROOT / "tools/sync_knowledge_wiki.py"), "--source", str(stage),
-                        "--drive-folder", args.drive_folder, "--state-file", str(args.sync_state)], check=True, timeout=900)
-    print(json.dumps(publish(args.source, args.state_dir, args.scope, upload)))
+                        "--drive-folder", args.drive_folder, "--drive-links", "--state-file", str(args.sync_state)], check=True, timeout=900)
+    print(json.dumps(publish(args.source, args.state_dir, args.scope, upload, args.build_navigation, args.source_cache, args.canonical_destination)))
 
 
 if __name__ == "__main__":

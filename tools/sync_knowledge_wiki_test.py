@@ -76,6 +76,35 @@ class SyncCredentialsTest(unittest.TestCase):
                 writer.files().create.assert_not_called()
                 self.assertEqual(json.loads(state.read_text()), {"page.md": "existing_page_123"})
 
+    def test_resolved_export_checks_remote_content_and_placement(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);page=root/'index.md';page.write_text('[page](page.md)')
+            writer=MagicMock();state={'index.md':'root-id','page.md':'page-id'}
+            text='[page](https://drive.google.com/file/d/page-id/view)'
+            expected=hashlib.md5(text.encode()).hexdigest()
+            writer.files().get.return_value.execute.return_value={'parents':['folder'],'md5Checksum':'old'}
+            for result in [{'parents':['folder'],'md5Checksum':'wrong'}, {'parents':['wrong'],'md5Checksum':expected}]:
+                writer.files().update.return_value.execute.return_value=result
+                with self.assertRaisesRegex(ValueError,'readback'):
+                    subject.publish_export(writer,page,'folder',root,state,d)
+            writer.files().update.return_value.execute.return_value={'parents':['folder'],'md5Checksum':expected}
+            self.assertTrue(subject.publish_export(writer,page,'folder',root,state,d))
+            writer.files().get.return_value.execute.return_value={'parents':['folder'],'md5Checksum':expected}
+            writer.files().update.reset_mock()
+            self.assertFalse(subject.publish_export(writer,page,'folder',root,state,d))
+            writer.files().update.assert_not_called()
+
+    def test_all_page_identities_are_registered_before_link_rendering(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);a=root/'a.md';b=root/'b.md'
+            a.write_text('[b](b.md)');b.write_text('[a](a.md)');state={}
+            drive=MagicMock();drive.files().create.return_value.execute.side_effect=[{'id':'a-id'},{'id':'b-id'}]
+            def export(*args):
+                self.assertEqual(state,{'a.md':'a-id','b.md':'b-id'})
+                return False
+            with patch.object(subject,'publish_export',side_effect=export):
+                self.assertEqual(subject.publish_drive_links(drive,'folder',root,[a,b],state,root/'state.json'),0)
+
 
 if __name__ == "__main__":
     unittest.main()

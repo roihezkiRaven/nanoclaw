@@ -6,12 +6,14 @@ StartLimitBurst=3
 
 [Service]
 Type=oneshot
+TimeoutStartSec=20min
 Restart=on-failure
 RestartSec=60
 WorkingDirectory=/home/assistant/nanoclaw
 EnvironmentFile=/home/assistant/nanoclaw/.env
-ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/publish_knowledge_wiki.py --source /home/assistant/nanoclaw/data/timeless-wiki --scope timeless --state-dir /home/assistant/nanoclaw/data/knowledge-publication/timeless --drive-folder ${TIMELESS_KNOWLEDGE_FOLDER_ID} --sync-state /home/assistant/nanoclaw/data/timeless-wiki/.drive-sync.json
+ExecStartPre=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/inventory_knowledge_sources.py --cache-dir /home/assistant/nanoclaw/data/knowledge-source-cache/timeless --root-folder ${TIMELESS_SOURCE_ROOT_ID} --wiki /home/assistant/nanoclaw/data/knowledge-drafts/timeless --state /home/assistant/nanoclaw/data/knowledge-publication/timeless/source-inventory.json
+ExecStart=/home/assistant/nanoclaw/.venv-gdrive/bin/python /home/assistant/nanoclaw/tools/publish_knowledge_wiki.py --build-navigation --source-cache /home/assistant/nanoclaw/data/knowledge-source-cache/timeless --canonical-destination /home/assistant/nanoclaw/data/timeless-wiki --source /home/assistant/nanoclaw/data/knowledge-drafts/timeless --scope timeless --state-dir /home/assistant/nanoclaw/data/knowledge-publication/timeless --drive-folder ${TIMELESS_KNOWLEDGE_FOLDER_ID} --sync-state /home/assistant/nanoclaw/data/timeless-wiki/.drive-sync.json
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/home/assistant/nanoclaw/data/knowledge-publication /home/assistant/nanoclaw/data/timeless-wiki /home/assistant/nanoclaw/config/google
+ReadWritePaths=/home/assistant/nanoclaw/data/knowledge-drafts/timeless /home/assistant/nanoclaw/data/knowledge-source-cache /home/assistant/nanoclaw/data/knowledge-publication /home/assistant/nanoclaw/data/timeless-wiki /home/assistant/nanoclaw/config/google

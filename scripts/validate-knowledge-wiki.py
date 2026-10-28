@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)")
 REQUIRED = {"type", "title", "description", "tags", "generated", "sources"}
+quality_spec = importlib.util.spec_from_file_location("knowledge_quality", Path(__file__).with_name("knowledge_quality.py"))
+quality = importlib.util.module_from_spec(quality_spec)
+quality_spec.loader.exec_module(quality)
 WHATSAPP_WORK_HEADINGS = (
     "## Developments",
     "## Decisions",
@@ -58,7 +62,7 @@ def project_checkpoint_errors(root: Path, source_id: str, item: dict) -> list[st
     projects = item.get("project_outputs", [])
     if not isinstance(projects, list) or any(not isinstance(path, str) for path in projects):
         return [f"{source_id}: project_outputs must be a list of canonical paths"]
-    return [f"{source_id}: {error}: {path}" for path in projects
+    return quality.assessment_errors(root, source_id, item) + [f"{source_id}: {error}: {path}" for path in projects
             if (error := project_output_error(root, source_id, item, path))]
 
 
@@ -67,7 +71,7 @@ def in_scope(relative: Path, scope: str) -> bool:
     return scope == "all" or whatsapp == (scope == "whatsapp")
 
 
-def validate(root: Path, scope: str = "all") -> list[str]:
+def validate(root: Path, scope: str = "all", source_cache: Path | None = None) -> list[str]:
     errors: list[str] = []
     for path in sorted(root.rglob("*.md")):
         relative = path.relative_to(root)
@@ -136,17 +140,20 @@ def validate(root: Path, scope: str = "all") -> list[str]:
                 errors.extend(f"{checkpoint.relative_to(root)}: {message}" for message in project_checkpoint_errors(root, source_id, item))
         except (OSError, ValueError) as exc:
             errors.append(f"{checkpoint.relative_to(root)}: invalid checkpoint: {exc}")
-    return errors
+    if source_cache is not None and scope != "whatsapp":
+        errors += quality.source_assessment_errors(root, source_cache, frontmatter)
+    return errors + quality.validate(root, scope, frontmatter, in_scope)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path, help="knowledge wiki directory")
     parser.add_argument("--scope", choices=("all", "timeless", "whatsapp"), default="all")
+    parser.add_argument("--source-cache", type=Path)
     args = parser.parse_args()
     if not args.root.is_dir():
         parser.error(f"not a directory: {args.root}")
-    errors = validate(args.root, args.scope)
+    errors = validate(args.root, args.scope, args.source_cache)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
